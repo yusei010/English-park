@@ -1,10 +1,18 @@
 const socket = io();
 const gameArea = document.getElementById("gameArea");
 
+// 🎯 名前入力を追加
+const username = prompt("名前を入力してください") || "名無し";
+
 // 自分のIDとアバター生成
 const myId = "user-" + Math.floor(Math.random() * 100000);
 const myPlayer = document.createElement("div");
 myPlayer.className = "player";
+myPlayer.textContent = username;
+myPlayer.style.color = "white";
+myPlayer.style.fontSize = "14px";
+myPlayer.style.textAlign = "center";
+myPlayer.style.lineHeight = "80px";
 gameArea.appendChild(myPlayer);
 
 // 初期位置と移動処理
@@ -13,15 +21,15 @@ let y = window.innerHeight / 2;
 const speed = 10;
 
 function updatePosition() {
-  const maxX = window.innerWidth - 80; // アバターの幅
-  const maxY = window.innerHeight - 80; // アバターの高さ
+  const maxX = window.innerWidth - 80;
+  const maxY = window.innerHeight - 80;
 
   x = Math.max(0, Math.min(x, maxX));
   y = Math.max(0, Math.min(y, maxY));
 
   myPlayer.style.left = x + "px";
   myPlayer.style.top = y + "px";
-  socket.emit("move", { id: myId, x, y });
+  socket.emit("move", { id: myId, name: username, x, y });
 }
 
 document.addEventListener("keydown", (e) => {
@@ -40,6 +48,11 @@ socket.on("move", data => {
   if (!others[data.id]) {
     const newPlayer = document.createElement("div");
     newPlayer.className = "player";
+    newPlayer.textContent = data.name;
+    newPlayer.style.color = "white";
+    newPlayer.style.fontSize = "14px";
+    newPlayer.style.textAlign = "center";
+    newPlayer.style.lineHeight = "80px";
     gameArea.appendChild(newPlayer);
     others[data.id] = newPlayer;
   }
@@ -47,10 +60,10 @@ socket.on("move", data => {
   others[data.id].style.top = data.y + "px";
 });
 
-socket.emit("join", { id: myId });
+socket.emit("join", { id: myId, name: username });
 
 socket.on("join", data => {
-  console.log(`${data.id} が入室しました`);
+  console.log(`${data.name} が入室しました`);
 });
 
 // 🎤 マイクON/OFFボタンの追加
