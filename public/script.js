@@ -13,6 +13,12 @@ let y = window.innerHeight / 2;
 const speed = 10;
 
 function updatePosition() {
+  const maxX = window.innerWidth - 80; // アバターの幅
+  const maxY = window.innerHeight - 80; // アバターの高さ
+
+  x = Math.max(0, Math.min(x, maxX));
+  y = Math.max(0, Math.min(y, maxY));
+
   myPlayer.style.left = x + "px";
   myPlayer.style.top = y + "px";
   socket.emit("move", { id: myId, x, y });
@@ -58,6 +64,8 @@ micButton.style.position = "absolute";
 micButton.style.top = "10px";
 micButton.style.left = "10px";
 micButton.style.zIndex = "10";
+micButton.style.padding = "10px";
+micButton.style.fontSize = "16px";
 document.body.appendChild(micButton);
 
 micButton.addEventListener("click", () => {
