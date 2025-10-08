@@ -1,85 +1,106 @@
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
 const socket = io();
+const gameArea = document.getElementById("gameArea");
 
-let myId = null;
-let myName = "";
-let players = {};
-let x = 400, y = 300;
+// 自分のIDとアバター生成
+const myId = "user-" + Math.floor(Math.random() * 100000);
+const myPlayer = document.createElement("div");
+myPlayer.className = "player";
+gameArea.appendChild(myPlayer);
 
-// 音声通話用
-const peer = new Peer();
-let myPeerId = null;
+// 初期位置と移動処理
+let x = window.innerWidth / 2;
+let y = window.innerHeight / 2;
+const speed = 10;
 
-document.getElementById("enterBtn").onclick = () => {
-  myName = document.getElementById("nameInput").value.trim();
-  if (myName === "") return;
-
-  document.getElementById("nameForm").style.display = "none";
-  canvas.style.display = "block";
-
-  myId = Math.random().toString(36).slice(2);
-  players[myId] = { x, y, name: myName };
-  draw();
-  sendMove();
-
-  // PeerJSの準備
-  peer.on("open", id => {
-    myPeerId = id;
-    socket.emit("join", { peerId: id });
-  });
-};
-
-// 音声通話：他人が入ってきたら発信
-socket.on("join", data => {
-  if (data.peerId === myPeerId) return;
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    const call = peer.call(data.peerId, stream);
-  });
-});
-
-// 音声通話：着信が来たら応答
-peer.on("call", call => {
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    call.answer(stream);
-    call.on("stream", remoteStream => {
-      document.getElementById("remoteAudio").srcObject = remoteStream;
-    });
-  });
-});
-
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (let id in players) {
-    const p = players[id];
-    ctx.fillStyle = id === myId ? "blue" : "green";
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 20, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "black";
-    ctx.font = "14px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(p.name || "???", p.x, p.y - 25);
-  }
+function updatePosition() {
+  myPlayer.style.left = x + "px";
+  myPlayer.style.top = y + "px";
+  socket.emit("move", { id: myId, x, y });
 }
 
-function sendMove() {
-  socket.emit("move", { id: myId, x, y, name: myName });
-}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp") y -= speed;
+  if (e.key === "ArrowDown") y += speed;
+  if (e.key === "ArrowLeft") x -= speed;
+  if (e.key === "ArrowRight") x += speed;
+  updatePosition();
+});
+
+// 他のプレイヤーの表示
+const others = {};
 
 socket.on("move", data => {
-  players[data.id] = { x: data.x, y: data.y, name: data.name };
-  draw();
+  if (data.id === myId) return;
+  if (!others[data.id]) {
+    const newPlayer = document.createElement("div");
+    newPlayer.className = "player";
+    gameArea.appendChild(newPlayer);
+    others[data.id] = newPlayer;
+  }
+  others[data.id].style.left = data.x + "px";
+  others[data.id].style.top = data.y + "px";
 });
 
-window.addEventListener("keydown", e => {
-  if (!myId) return;
-  if (e.key === "ArrowUp") y -= 10;
-  if (e.key === "ArrowDown") y += 10;
-  if (e.key === "ArrowLeft") x -= 10;
-  if (e.key === "ArrowRight") x += 10;
-  players[myId] = { x, y, name: myName };
-  draw();
-  sendMove();
+socket.emit("join", { id: myId });
+
+socket.on("join", data => {
+  console.log(`${data.id} が入室しました`);
+});
+
+// 🎤 マイクON/OFFボタンの追加
+let micEnabled = true;
+let localStream;
+
+const micButton = document.createElement("button");
+micButton.id = "micToggle";
+micButton.textContent = "🎤 マイクON";
+micButton.style.position = "absolute";
+micButton.style.top = "10px";
+micButton.style.left = "10px";
+micButton.style.zIndex = "10";
+document.body.appendChild(micButton);
+
+micButton.addEventListener("click", () => {
+  micEnabled = !micEnabled;
+  micButton.textContent = micEnabled ? "🎤 マイクON" : "🔇 マイクOFF";
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = micEnabled;
+    });
+  }
+});
+
+// 🎙️ PeerJS 音声通話
+const peer = new Peer(myId, {
+  host: "peerjs.com",
+  port: 443,
+  secure: true
+});
+
+navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+  localStream = stream;
+
+  peer.on("call", call => {
+    call.answer(stream);
+    call.on("stream", remoteStream => {
+      const audio = new Audio();
+      audio.srcObject = remoteStream;
+      audio.play();
+    });
+  });
+
+  peer.on("open", () => {
+    peer.listAllPeers(peers => {
+      peers.forEach(id => {
+        if (id !== myId) {
+          const call = peer.call(id, stream);
+          call.on("stream", remoteStream => {
+            const audio = new Audio();
+            audio.srcObject = remoteStream;
+            audio.play();
+          });
+        }
+      });
+    });
+  });
 });
