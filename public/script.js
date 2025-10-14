@@ -1,3 +1,4 @@
+// 🌸 桜アニメーション生成
 function createSakura() {
   const container = document.querySelector(".sakura-container");
   for (let i = 0; i < 20; i++) {
@@ -9,6 +10,7 @@ function createSakura() {
   }
 }
 
+// 🌸 Welcome画面 → 2秒後に広場へ
 window.addEventListener("load", () => {
   createSakura();
   setTimeout(() => {
@@ -18,12 +20,14 @@ window.addEventListener("load", () => {
   }, 2000);
 });
 
+// 🎮 広場の処理を開始
 function startGame() {
   const socket = io();
   const gameArea = document.getElementById("gameArea");
 
   const username = prompt("名前を入力してください") || "名無し";
   const myId = "user-" + Math.floor(Math.random() * 100000);
+
   const myPlayer = document.createElement("div");
   myPlayer.className = "player";
   myPlayer.textContent = username;
@@ -109,7 +113,7 @@ function startGame() {
       call.on("stream", remoteStream => {
         const audio = new Audio();
         audio.srcObject = remoteStream;
-        audio.play();
+        audio.play().catch(e => console.log("再生エラー:", e));
       });
     });
 
@@ -121,7 +125,7 @@ function startGame() {
             call.on("stream", remoteStream => {
               const audio = new Audio();
               audio.srcObject = remoteStream;
-              audio.play();
+              audio.play().catch(e => console.log("再生エラー:", e));
             });
           }
         });
