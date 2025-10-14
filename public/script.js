@@ -98,15 +98,15 @@ function startGame() {
     }
   });
 
-  // 🎙️ PeerJS 音声通話
-  const peer = new Peer(myId, {
-    host: "peerjs.com",
-    port: 443,
-    secure: true
-  });
-
+  // 🎙️ PeerJS 音声通話（マイク取得後にPeerJSを起動）
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
     localStream = stream;
+
+    const peer = new Peer(myId, {
+      host: "peerjs.com",
+      port: 443,
+      secure: true
+    });
 
     peer.on("call", call => {
       call.answer(stream);
@@ -131,5 +131,8 @@ function startGame() {
         });
       });
     });
+  }).catch(err => {
+    console.error("🎤 マイク取得失敗:", err);
   });
 }
+
