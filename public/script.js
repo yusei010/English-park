@@ -47,6 +47,7 @@ function startGame() {
     socket.emit("move", { id: myId, name: username, x, y });
   }
 
+  // ⌨️ キーボード操作（PC用）
   document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowUp") y -= speed;
     if (e.key === "ArrowDown") y += speed;
@@ -54,6 +55,38 @@ function startGame() {
     if (e.key === "ArrowRight") x += speed;
     updatePosition();
   });
+
+  // 📱 スマホ用移動ボタン
+  const isMobile = /iPhone|iPad|Android/.test(navigator.userAgent);
+  if (isMobile) {
+    const directions = ["↑", "↓", "←", "→"];
+    directions.forEach(dir => {
+      const btn = document.createElement("button");
+      btn.textContent = dir;
+      btn.className = "moveButton";
+      btn.style.position = "fixed";
+      btn.style.zIndex = "10";
+      btn.style.width = "60px";
+      btn.style.height = "60px";
+      btn.style.fontSize = "24px";
+      btn.style.opacity = "0.8";
+
+      if (dir === "↑") { btn.style.bottom = "120px"; btn.style.left = "50%"; btn.style.transform = "translateX(-50%)"; }
+      if (dir === "↓") { btn.style.bottom = "0px"; btn.style.left = "50%"; btn.style.transform = "translateX(-50%)"; }
+      if (dir === "←") { btn.style.bottom = "60px"; btn.style.left = "10px"; }
+      if (dir === "→") { btn.style.bottom = "60px"; btn.style.right = "10px"; }
+
+      btn.addEventListener("click", () => {
+        if (dir === "↑") y -= speed;
+        if (dir === "↓") y += speed;
+        if (dir === "←") x -= speed;
+        if (dir === "→") x += speed;
+        updatePosition();
+      });
+
+      document.body.appendChild(btn);
+    });
+  }
 
   const others = {};
   socket.on("move", data => {
@@ -80,9 +113,9 @@ function startGame() {
   const micButton = document.createElement("button");
   micButton.id = "micToggle";
   micButton.textContent = "🎤 マイクON";
-  micButton.style.position = "absolute";
-  micButton.style.top = "10px";
-  micButton.style.left = "10px";
+  micButton.style.position = "fixed";
+  micButton.style.bottom = "10px";
+  micButton.style.right = "10px";
   micButton.style.zIndex = "10";
   micButton.style.padding = "10px";
   micButton.style.fontSize = "16px";
@@ -135,4 +168,3 @@ function startGame() {
     console.error("🎤 マイク取得失敗:", err);
   });
 }
-

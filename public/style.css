@@ -1,63 +1,119 @@
-body {
-    margin: 0;
-    overflow: hidden;
+/* 🌸 桜アニメーション */
+.sakura-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.sakura {
+  position: absolute;
+  top: -40px;
+  width: 30px;
+  height: 30px;
+  background-image: url("sakura.png"); /* ← 桜の画像を用意してね */
+  background-size: cover;
+  animation-name: fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes fall {
+  to {
+    transform: translateY(100vh) rotate(360deg);
   }
-  
-  #welcomeScreen {
-    position: fixed;
-    width: 100vw;
-    height: 100vh;
-    background: linear-gradient(to bottom, #fefefe, #ffeef5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-    z-index: 100;
-    overflow: hidden;
-  }
-  
-  #logoText {
-    font-size: 48px;
-    font-family: 'serif';
-    color: #d6336c;
-    animation: fadeIn 2s ease-in-out;
-  }
-  
-  @keyframes fadeIn {
-    0% { opacity: 0; transform: scale(0.8); }
-    100% { opacity: 1; transform: scale(1); }
-  }
-  
-  .sakura-container {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-  
-  .sakura {
-    position: absolute;
-    width: 30px;
-    height: 30px;
-    background-image: url('https://cdn-icons-png.flaticon.com/512/616/616430.png');
-    background-size: cover;
-    animation: fall 5s linear infinite;
-  }
-  
-  @keyframes fall {
-    0% { transform: translateY(-50px) rotate(0deg); opacity: 1; }
-    100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
-  }
-  
+}
+
+/* 🎮 ゲームエリアとプレイヤー */
+#gameArea {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(to bottom, #cceeff, #ffffff);
+  overflow: hidden;
+  z-index: 2;
+}
+
+.player {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  background-color: rgba(255, 200, 200, 0.8);
+  border-radius: 50%;
+  text-align: center;
+  line-height: 80px;
+  font-weight: bold;
+  font-size: 16px;
+  color: #333;
+  box-shadow: 0 0 5px #999;
+}
+
+/* 🎤 マイクボタン */
+#micToggle {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  z-index: 10;
+  padding: 10px 16px;
+  font-size: 16px;
+  background-color: #ffdddd;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+/* 📱 スマホ用移動ボタン */
+.moveButton {
+  background-color: #ffeeee;
+  border: 2px solid #cc9999;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+/* 🌸 Welcome画面 */
+#welcomeScreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(to bottom, #ffe6f0, #ffffff);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 32px;
+  font-weight: bold;
+  color: #cc3366;
+  z-index: 3;
+}
+
+/* 📱 レスポンシブ対応 */
+@media screen and (max-width: 600px) {
   .player {
-    position: absolute;
-    width: 80px;
-    height: 80px;
-    background-image: url('https://cdn-icons-png.flaticon.com/512/921/921490.png');
-    background-size: cover;
-    color: white;
-    font-size: 14px;
-    text-align: center;
-    line-height: 80px;
+    width: 60px;
+    height: 60px;
+    line-height: 60px;
+    font-size: 12px;
   }
-  
+
+  #micToggle {
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+
+  #welcomeScreen {
+    font-size: 24px;
+  }
+
+  .moveButton {
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
+  }
+}
