@@ -137,24 +137,9 @@ function startGame() {
     others[data.id].style.top = data.y + "px";
   });
 
-  socket.emit("join", { id: myId, name: username });
-
-  socket.on("join", data => {
-    console.log(`${data.name} が入室しました`);
-    if (peer && localStream) {
-      const call = peer.call(data.id, localStream);
-      call.on("stream", remoteStream => {
-        const audio = new Audio();
-        audio.srcObject = remoteStream;
-        audio.play().catch(e => console.log("再生エラー:", e));
-      });
-    }
-  });
-
   // 🎤 マイクON/OFFボタン
   let micEnabled = true;
   let localStream;
-  let audioCtx, gainNode;
 
   const micButton = document.createElement("button");
   micButton.id = "micToggle";
@@ -177,20 +162,10 @@ function startGame() {
     }
   });
 
-  // 🎙️ PeerJS 音声通話
+  // 🎙️ PeerJS 音声通話（双方向・反響防止）
   let peer;
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
     localStream = stream;
-
-    audioCtx = new AudioContext();
-    gainNode = audioCtx.createGain();
-    const source = audioCtx.createMediaStreamSource(stream);
-    source.connect(gainNode).connect(audioCtx.destination);
-
-    document.body.addEventListener("click", () => {
-      const dummy = new Audio();
-      dummy.play().catch(() => {});
-    }, { once: true });
 
     peer = new Peer(myId, {
       host: "peerjs.com",
@@ -200,22 +175,11 @@ function startGame() {
 
     peer.on("open", id => {
       console.log("✅ PeerJS接続成功:", id);
-      peer.listAllPeers(peers => {
-        peers.forEach(pid => {
-          if (pid !== myId) {
-            const call = peer.call(pid, stream);
-            call.on("stream", remoteStream => {
-              const audio = new Audio();
-              audio.srcObject = remoteStream;
-              audio.play().catch(e => console.log("再生エラー:", e));
-            });
-          }
-        });
-      });
+      socket.emit("join", { id: myId, name: username });
     });
 
     peer.on("call", call => {
-      call.answer(stream);
+      call.answer(localStream);
       call.on("stream", remoteStream => {
         const audio = new Audio();
         audio.srcObject = remoteStream;
@@ -223,35 +187,46 @@ function startGame() {
       });
     });
 
+    socket.on("join", data => {
+      if (peer && localStream && data.id !== myId) {
+        const call = peer.call(data.id, localStream);
+        call.on("stream", remoteStream => {
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play().catch(e => console.log("再生エラー:", e));
+        });
+      }
+    });
+
   }).catch(err => {
     console.error("🎤 マイク取得失敗:", err);
     alert("マイクの使用が許可されていません。設定を確認してください。");
   });
 
-// ⚙️ 設定パネルのイベント
-document.getElementById("settingsToggle").addEventListener("click", () => {
-  const panel = document.getElementById("settingsPanel");
-  panel.style.display = panel.style.display === "none" ? "block" : "none";
-});
+  // ⚙️ 設定パネルのイベント
+  document.getElementById("settingsToggle").addEventListener("click", () => {
+    const panel = document.getElementById("settingsPanel");
+    panel.style.display = panel.style.display === "none" ? "block" : "none";
+  });
 
-document.getElementById("stickPosition").addEventListener("change", e => {
-  const pos = e.target.value;
-  const base = document.getElementById("stickBase");
-  if (pos === "left") {
-    base.style.left = "20px";
-    base.style.right = "";
-  } else {
-    base.style.right = "20px";
-    base.style.left = "";
-  }
-});
+  document.getElementById("stickPosition").addEventListener("change", e => {
+    const pos = e.target.value;
+    const base = document.getElementById("stickBase");
+    if (pos === "left") {
+      base.style.left = "20px";
+      base.style.right = "";
+    } else {
+      base.style.right = "20px";
+      base.style.left = "";
+    }
+  });
 
-document.getElementById("stickSize").addEventListener("input", e => {
-  const size = parseInt(e.target.value);
-  const base = document.getElementById("stickBase");
-  const knob = document.getElementById("stickKnob");
+  document.getElementById("stickSize").addEventListener("input", e => {
+    const size = parseInt(e.target.value);
+    const base = document.getElementById("stickBase");
+    const knob = document.getElementById("stickKnob");
 
-  const baseSize = size + "px";
+    const baseSize = size + "px";
   const knobSize = size / 2 + "px";
   const knobCenter = size / 2 + "px";
 
