@@ -45,6 +45,44 @@ function startGame() {
     myPlayer.style.left = x + "px";
     myPlayer.style.top = y + "px";
     socket.emit("move", { id: myId, name: username, x, y });
+    document.getElementById("settingsToggle").addEventListener("click", () => {
+      const panel = document.getElementById("settingsPanel");
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
+    });
+    
+    document.getElementById("stickPosition").addEventListener("change", e => {
+      const pos = e.target.value;
+      const base = document.getElementById("stickBase");
+      if (pos === "left") {
+        base.style.left = "20px";
+        base.style.right = "";
+      } else {
+        base.style.right = "20px";
+        base.style.left = "";
+      }
+    });
+    
+    document.getElementById("stickSize").addEventListener("input", e => {
+      const size = e.target.value + "px";
+      const base = document.getElementById("stickBase");
+      const knob = document.getElementById("stickKnob");
+      base.style.width = size;
+      base.style.height = size;
+      knob.style.width = parseInt(e.target.value) / 2 + "px";
+      knob.style.height = parseInt(e.target.value) / 2 + "px";
+    });
+    
+    document.getElementById("micVolume").addEventListener("input", e => {
+      const volume = parseFloat(e.target.value);
+      if (localStream) {
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaStreamSource(localStream);
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = volume;
+        source.connect(gainNode).connect(audioCtx.destination);
+      }
+    });
+    
   }
 
   // ⌨️ キーボード操作（PC用）

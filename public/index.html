@@ -15,6 +15,22 @@
 
   <div id="gameArea" style="display: none;"></div>
   <script src="script.js"></script>
+  <button id="settingsToggle">⚙️ 設定</button>
+<div id="settingsPanel" style="display:none;">
+  <h3>操作設定</h3>
+  <label>スティック位置:
+    <select id="stickPosition">
+      <option value="left">左下</option>
+      <option value="right">右下</option>
+    </select>
+  </label><br>
+  <label>スティックサイズ:
+    <input type="range" id="stickSize" min="50" max="120" value="80">
+  </label><br>
+  <label>マイク音量:
+    <input type="range" id="micVolume" min="0" max="1" step="0.01" value="1">
+  </label>
+</div>
 </body>
 </html>
 
