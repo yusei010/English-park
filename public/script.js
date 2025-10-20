@@ -179,27 +179,24 @@ function startGame() {
 
   // 🎙️ PeerJS 音声通話
   let peer;
+  let localStream;
+  
+  // 🎙️ マイク取得
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
     localStream = stream;
-
-    audioCtx = new AudioContext();
-    gainNode = audioCtx.createGain();
-    const source = audioCtx.createMediaStreamSource(stream);
-    source.connect(gainNode).connect(audioCtx.destination);
-
-    document.body.addEventListener("click", () => {
-      const dummy = new Audio();
-      dummy.play().catch(() => {});
-    }, { once: true });
-
+  
+    // ✅ PeerJS 初期化
     peer = new Peer(myId, {
       host: "peerjs.com",
       port: 443,
       secure: true
     });
-
+  
+    // ✅ 自分が接続されたとき
     peer.on("open", id => {
       console.log("✅ PeerJS接続成功:", id);
+  
+      // 既存のピアに発信
       peer.listAllPeers(peers => {
         peers.forEach(pid => {
           if (pid !== myId) {
@@ -213,20 +210,22 @@ function startGame() {
         });
       });
     });
-
+  
+    // ✅ 他人から通話が来たとき
     peer.on("call", call => {
-      call.answer(stream);
+      call.answer(stream); // 自分の音声を返す
       call.on("stream", remoteStream => {
         const audio = new Audio();
         audio.srcObject = remoteStream;
         audio.play().catch(e => console.log("再生エラー:", e));
       });
     });
-
+  
   }).catch(err => {
     console.error("🎤 マイク取得失敗:", err);
     alert("マイクの使用が許可されていません。設定を確認してください。");
   });
+  
 
 // ⚙️ 設定パネルのイベント
 document.getElementById("settingsToggle").addEventListener("click", () => {
