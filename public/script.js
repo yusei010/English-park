@@ -56,47 +56,57 @@ function startGame() {
     updatePosition();
   });
 
-  // 📱 スマホ用スティック風移動ボタン（長押し対応）
+  // 📱 仮想スティック（スマホ用）
   const isMobile = /iPhone|iPad|Android/.test(navigator.userAgent);
   if (isMobile) {
-    const directions = [
-      { dir: "↑", dx: 0, dy: -speed },
-      { dir: "↓", dx: 0, dy: speed },
-      { dir: "←", dx: -speed, dy: 0 },
-      { dir: "→", dx: speed, dy: 0 }
-    ];
+    const stickBase = document.createElement("div");
+    const stickKnob = document.createElement("div");
 
-    directions.forEach(({ dir, dx, dy }) => {
-      const btn = document.createElement("button");
-      btn.textContent = dir;
-      btn.className = "moveButton";
+    stickBase.id = "stickBase";
+    stickKnob.id = "stickKnob";
 
-      btn.style.position = "fixed";
-      btn.style.zIndex = "10";
-      btn.style.width = "40px";
-      btn.style.height = "40px";
-      btn.style.fontSize = "18px";
-      btn.style.opacity = "0.8";
+    document.body.appendChild(stickBase);
+    stickBase.appendChild(stickKnob);
 
-      if (dir === "↑") { btn.style.bottom = "100px"; btn.style.left = "50%"; btn.style.transform = "translateX(-50%)"; }
-      if (dir === "↓") { btn.style.bottom = "20px"; btn.style.left = "50%"; btn.style.transform = "translateX(-50%)"; }
-      if (dir === "←") { btn.style.bottom = "60px"; btn.style.left = "20px"; }
-      if (dir === "→") { btn.style.bottom = "60px"; btn.style.right = "20px"; }
+    let dragging = false;
+    let originX = 0;
+    let originY = 0;
+    let moveInterval;
 
-      let interval;
-      btn.addEventListener("touchstart", () => {
-        interval = setInterval(() => {
-          x += dx;
-          y += dy;
-          updatePosition();
-        }, 100);
-      });
+    stickBase.addEventListener("touchstart", e => {
+      dragging = true;
+      const touch = e.touches[0];
+      originX = touch.clientX;
+      originY = touch.clientY;
 
-      btn.addEventListener("touchend", () => {
-        clearInterval(interval);
-      });
+      moveInterval = setInterval(() => {
+        const dx = parseInt(stickKnob.style.left) - 40;
+        const dy = parseInt(stickKnob.style.top) - 40;
+        x += dx * 0.1;
+        y += dy * 0.1;
+        updatePosition();
+      }, 50);
+    });
 
-      document.body.appendChild(btn);
+    stickBase.addEventListener("touchmove", e => {
+      if (!dragging) return;
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - originX;
+      const deltaY = touch.clientY - originY;
+      const maxDist = 40;
+      const dist = Math.min(Math.sqrt(deltaX**2 + deltaY**2), maxDist);
+      const angle = Math.atan2(deltaY, deltaX);
+      const knobX = 40 + dist * Math.cos(angle);
+      const knobY = 40 + dist * Math.sin(angle);
+      stickKnob.style.left = knobX + "px";
+      stickKnob.style.top = knobY + "px";
+    });
+
+    stickBase.addEventListener("touchend", () => {
+      dragging = false;
+      clearInterval(moveInterval);
+      stickKnob.style.left = "40px";
+      stickKnob.style.top = "40px";
     });
   }
 

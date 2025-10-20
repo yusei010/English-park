@@ -67,18 +67,28 @@
   cursor: pointer;
 }
 
-/* 📱 スティック風移動ボタン（スマホ専用） */
-.moveButton {
-  background-color: #ffeeee;
-  border: 2px solid #cc9999;
+/* 📱 仮想スティック（スマホ専用） */
+#stickBase {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 80px;
+  height: 80px;
+  background: rgba(200,200,200,0.3);
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  cursor: pointer;
+  z-index: 10;
   touch-action: none;
+}
+
+#stickKnob {
+  position: absolute;
   width: 40px;
   height: 40px;
-  font-size: 18px;
-  opacity: 0.8;
+  left: 40px;
+  top: 40px;
+  background: rgba(255,100,100,0.8);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /* 🌸 Welcome画面 */
@@ -116,9 +126,13 @@
     font-size: 24px;
   }
 
-  .moveButton {
+  #stickBase {
+    width: 70px;
+    height: 70px;
+  }
+
+  #stickKnob {
     width: 36px;
     height: 36px;
-    font-size: 16px;
   }
 }
