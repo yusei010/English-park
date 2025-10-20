@@ -13,24 +13,27 @@
 .sakura {
   position: absolute;
   top: -40px;
-  width: 30px;
-  height: 30px;
-  background-image: url("sakura.png");
   background-size: cover;
+  background-repeat: no-repeat;
   animation-name: fall;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
-  opacity: 0.8;
+  will-change: transform, opacity;
 }
 
+/* 花びらの舞い方 */
 @keyframes fall {
   0% {
-    transform: translateY(0) translateX(0) rotate(0deg);
+    transform: translateX(0) translateY(0) rotate(0deg);
     opacity: 1;
   }
+  50% {
+    transform: translateX(30px) translateY(50vh) rotate(180deg);
+    opacity: 0.7;
+  }
   100% {
-    transform: translateY(100vh) translateX(50px) rotate(360deg);
-    opacity: 0.5;
+    transform: translateX(-30px) translateY(100vh) rotate(360deg);
+    opacity: 0.4;
   }
 }
 

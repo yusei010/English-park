@@ -1,22 +1,32 @@
 // 🌸 桜アニメーション生成
 function createSakura() {
   const container = document.querySelector(".sakura-container");
-  for (let i = 0; i < 20; i++) {
+  const images = ["sakura1.png", "sakura2.png", "sakura3.png"]; // 花びら画像のバリエーション
+
+  for (let i = 0; i < 30; i++) {
     const sakura = document.createElement("div");
     sakura.className = "sakura";
 
-    // ランダムな位置とサイズ
+    // ランダムな位置・サイズ・画像
     const startLeft = Math.random() * window.innerWidth;
     const size = 20 + Math.random() * 20;
+    const image = images[Math.floor(Math.random() * images.length)];
+
     sakura.style.left = startLeft + "px";
     sakura.style.width = size + "px";
     sakura.style.height = size + "px";
+    sakura.style.backgroundImage = `url(${image})`;
 
-    // ランダムなアニメーション時間と遅延
-    const duration = 5 + Math.random() * 5;
+    // ランダムなアニメーション時間・遅延・透明度・奥行き
+    const duration = 6 + Math.random() * 6;
     const delay = Math.random() * 5;
+    const opacity = 0.5 + Math.random() * 0.5;
+    const z = Math.floor(Math.random() * 3); // 0〜2
+
     sakura.style.animationDuration = duration + "s";
     sakura.style.animationDelay = delay + "s";
+    sakura.style.opacity = opacity;
+    sakura.style.zIndex = z;
 
     container.appendChild(sakura);
   }
