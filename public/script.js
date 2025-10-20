@@ -45,44 +45,6 @@ function startGame() {
     myPlayer.style.left = x + "px";
     myPlayer.style.top = y + "px";
     socket.emit("move", { id: myId, name: username, x, y });
-    document.getElementById("settingsToggle").addEventListener("click", () => {
-      const panel = document.getElementById("settingsPanel");
-      panel.style.display = panel.style.display === "none" ? "block" : "none";
-    });
-    
-    document.getElementById("stickPosition").addEventListener("change", e => {
-      const pos = e.target.value;
-      const base = document.getElementById("stickBase");
-      if (pos === "left") {
-        base.style.left = "20px";
-        base.style.right = "";
-      } else {
-        base.style.right = "20px";
-        base.style.left = "";
-      }
-    });
-    
-    document.getElementById("stickSize").addEventListener("input", e => {
-      const size = e.target.value + "px";
-      const base = document.getElementById("stickBase");
-      const knob = document.getElementById("stickKnob");
-      base.style.width = size;
-      base.style.height = size;
-      knob.style.width = parseInt(e.target.value) / 2 + "px";
-      knob.style.height = parseInt(e.target.value) / 2 + "px";
-    });
-    
-    document.getElementById("micVolume").addEventListener("input", e => {
-      const volume = parseFloat(e.target.value);
-      if (localStream) {
-        const audioCtx = new AudioContext();
-        const source = audioCtx.createMediaStreamSource(localStream);
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.value = volume;
-        source.connect(gainNode).connect(audioCtx.destination);
-      }
-    });
-    
   }
 
   // ⌨️ キーボード操作（PC用）
@@ -103,6 +65,19 @@ function startGame() {
     stickBase.id = "stickBase";
     stickKnob.id = "stickKnob";
 
+    stickBase.style.position = "fixed";
+    stickBase.style.bottom = "20px";
+    stickBase.style.left = "20px";
+    stickBase.style.width = "80px";
+    stickBase.style.height = "80px";
+    stickBase.style.zIndex = "100";
+
+    stickKnob.style.position = "absolute";
+    stickKnob.style.width = "40px";
+    stickKnob.style.height = "40px";
+    stickKnob.style.left = "40px";
+    stickKnob.style.top = "40px";
+
     document.body.appendChild(stickBase);
     stickBase.appendChild(stickKnob);
 
@@ -118,8 +93,8 @@ function startGame() {
       originY = touch.clientY;
 
       moveInterval = setInterval(() => {
-        const dx = parseInt(stickKnob.style.left) - 40;
-        const dy = parseInt(stickKnob.style.top) - 40;
+        const dx = parseInt(stickKnob.style.left || "40") - 40;
+        const dy = parseInt(stickKnob.style.top || "40") - 40;
         x += dx * 0.1;
         y += dy * 0.1;
         updatePosition();
@@ -163,13 +138,24 @@ function startGame() {
   });
 
   socket.emit("join", { id: myId, name: username });
+
   socket.on("join", data => {
     console.log(`${data.name} が入室しました`);
+    if (peer && localStream) {
+      const call = peer.call(data.id, localStream);
+      call.on("stream", remoteStream => {
+        const audio = new Audio();
+        audio.srcObject = remoteStream;
+        audio.play().catch(e => console.log("再生エラー:", e));
+      });
+    }
   });
 
   // 🎤 マイクON/OFFボタン
   let micEnabled = true;
   let localStream;
+  let audioCtx, gainNode;
+
   const micButton = document.createElement("button");
   micButton.id = "micToggle";
   micButton.textContent = "🎤 マイクON";
@@ -192,13 +178,40 @@ function startGame() {
   });
 
   // 🎙️ PeerJS 音声通話
+  let peer;
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
     localStream = stream;
 
-    const peer = new Peer(myId, {
+    audioCtx = new AudioContext();
+    gainNode = audioCtx.createGain();
+    const source = audioCtx.createMediaStreamSource(stream);
+    source.connect(gainNode).connect(audioCtx.destination);
+
+    document.body.addEventListener("click", () => {
+      const dummy = new Audio();
+      dummy.play().catch(() => {});
+    }, { once: true });
+
+    peer = new Peer(myId, {
       host: "peerjs.com",
       port: 443,
       secure: true
+    });
+
+    peer.on("open", id => {
+      console.log("✅ PeerJS接続成功:", id);
+      peer.listAllPeers(peers => {
+        peers.forEach(pid => {
+          if (pid !== myId) {
+            const call = peer.call(pid, stream);
+            call.on("stream", remoteStream => {
+              const audio = new Audio();
+              audio.srcObject = remoteStream;
+              audio.play().catch(e => console.log("再生エラー:", e));
+            });
+          }
+        });
+      });
     });
 
     peer.on("call", call => {
@@ -210,21 +223,44 @@ function startGame() {
       });
     });
 
-    peer.on("open", () => {
-      peer.listAllPeers(peers => {
-        peers.forEach(id => {
-          if (id !== myId) {
-            const call = peer.call(id, stream);
-            call.on("stream", remoteStream => {
-              const audio = new Audio();
-              audio.srcObject = remoteStream;
-              audio.play().catch(e => console.log("再生エラー:", e));
-            });
-          }
-        });
-      });
-    });
   }).catch(err => {
     console.error("🎤 マイク取得失敗:", err);
+    alert("マイクの使用が許可されていません。設定を確認してください。");
   });
+
+// ⚙️ 設定パネルのイベント
+document.getElementById("settingsToggle").addEventListener("click", () => {
+  const panel = document.getElementById("settingsPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+});
+
+document.getElementById("stickPosition").addEventListener("change", e => {
+  const pos = e.target.value;
+  const base = document.getElementById("stickBase");
+  if (pos === "left") {
+    base.style.left = "20px";
+    base.style.right = "";
+  } else {
+    base.style.right = "20px";
+    base.style.left = "";
+  }
+});
+
+document.getElementById("stickSize").addEventListener("input", e => {
+  const size = parseInt(e.target.value);
+  const base = document.getElementById("stickBase");
+  const knob = document.getElementById("stickKnob");
+
+  const baseSize = size + "px";
+  const knobSize = size / 2 + "px";
+  const knobCenter = size / 2 + "px";
+
+  base.style.width = baseSize;
+  base.style.height = baseSize;
+  knob.style.width = knobSize;
+  knob.style.height = knobSize;
+  knob.style.left = knobCenter;
+  knob.style.top = knobCenter;
+});
 }
+
