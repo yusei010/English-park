@@ -4,11 +4,24 @@ function createSakura() {
   for (let i = 0; i < 20; i++) {
     const sakura = document.createElement("div");
     sakura.className = "sakura";
-    sakura.style.left = Math.random() * window.innerWidth + "px";
-    sakura.style.animationDuration = (3 + Math.random() * 3) + "s";
+
+    // ランダムな位置とサイズ
+    const startLeft = Math.random() * window.innerWidth;
+    const size = 20 + Math.random() * 20;
+    sakura.style.left = startLeft + "px";
+    sakura.style.width = size + "px";
+    sakura.style.height = size + "px";
+
+    // ランダムなアニメーション時間と遅延
+    const duration = 5 + Math.random() * 5;
+    const delay = Math.random() * 5;
+    sakura.style.animationDuration = duration + "s";
+    sakura.style.animationDelay = delay + "s";
+
     container.appendChild(sakura);
   }
 }
+
 
 // 🌸 Welcome画面 → 2秒後に広場へ
 window.addEventListener("load", () => {
