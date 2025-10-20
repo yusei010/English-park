@@ -56,32 +56,44 @@ function startGame() {
     updatePosition();
   });
 
-  // 📱 スマホ用移動ボタン
+  // 📱 スマホ用スティック風移動ボタン（長押し対応）
   const isMobile = /iPhone|iPad|Android/.test(navigator.userAgent);
   if (isMobile) {
-    const directions = ["↑", "↓", "←", "→"];
-    directions.forEach(dir => {
+    const directions = [
+      { dir: "↑", dx: 0, dy: -speed },
+      { dir: "↓", dx: 0, dy: speed },
+      { dir: "←", dx: -speed, dy: 0 },
+      { dir: "→", dx: speed, dy: 0 }
+    ];
+
+    directions.forEach(({ dir, dx, dy }) => {
       const btn = document.createElement("button");
       btn.textContent = dir;
       btn.className = "moveButton";
+
       btn.style.position = "fixed";
       btn.style.zIndex = "10";
-      btn.style.width = "60px";
-      btn.style.height = "60px";
-      btn.style.fontSize = "24px";
+      btn.style.width = "40px";
+      btn.style.height = "40px";
+      btn.style.fontSize = "18px";
       btn.style.opacity = "0.8";
 
-      if (dir === "↑") { btn.style.bottom = "120px"; btn.style.left = "50%"; btn.style.transform = "translateX(-50%)"; }
-      if (dir === "↓") { btn.style.bottom = "0px"; btn.style.left = "50%"; btn.style.transform = "translateX(-50%)"; }
-      if (dir === "←") { btn.style.bottom = "60px"; btn.style.left = "10px"; }
-      if (dir === "→") { btn.style.bottom = "60px"; btn.style.right = "10px"; }
+      if (dir === "↑") { btn.style.bottom = "100px"; btn.style.left = "50%"; btn.style.transform = "translateX(-50%)"; }
+      if (dir === "↓") { btn.style.bottom = "20px"; btn.style.left = "50%"; btn.style.transform = "translateX(-50%)"; }
+      if (dir === "←") { btn.style.bottom = "60px"; btn.style.left = "20px"; }
+      if (dir === "→") { btn.style.bottom = "60px"; btn.style.right = "20px"; }
 
-      btn.addEventListener("click", () => {
-        if (dir === "↑") y -= speed;
-        if (dir === "↓") y += speed;
-        if (dir === "←") x -= speed;
-        if (dir === "→") x += speed;
-        updatePosition();
+      let interval;
+      btn.addEventListener("touchstart", () => {
+        interval = setInterval(() => {
+          x += dx;
+          y += dy;
+          updatePosition();
+        }, 100);
+      });
+
+      btn.addEventListener("touchend", () => {
+        clearInterval(interval);
       });
 
       document.body.appendChild(btn);
@@ -131,7 +143,7 @@ function startGame() {
     }
   });
 
-  // 🎙️ PeerJS 音声通話（マイク取得後にPeerJSを起動）
+  // 🎙️ PeerJS 音声通話
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
     localStream = stream;
 
