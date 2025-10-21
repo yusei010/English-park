@@ -224,7 +224,7 @@ function startGame() {
     });
 
     peer.on("call", call => {
-      call.answer(localStream);
+      call.answer(processedStream);
       call.on("stream", remoteStream => {
         const audio = new Audio();
         audio.srcObject = remoteStream;
@@ -237,7 +237,7 @@ function startGame() {
 
     socket.on("join", data => {
       if (peer && localStream && data.id !== myId) {
-        const call = peer.call(data.id, localStream);
+        const call = peer.call(data.id, processedStream);
         call.on("stream", remoteStream => {
           const audio = new Audio();
           audio.srcObject = remoteStream;
