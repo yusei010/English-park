@@ -1,3 +1,51 @@
+/* 🌸 ログイン画面 */
+#loginScreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(to bottom, #fff0f5, #ffffff);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 5;
+}
+
+#loginScreen input {
+  padding: 10px;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+#loginScreen button {
+  padding: 10px 20px;
+  font-size: 16px;
+  background: #cc3366;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* 🌸 Welcome画面 */
+#welcomeScreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(to bottom, #ffe6f0, #ffffff);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 32px;
+  font-weight: bold;
+  color: #cc3366;
+  z-index: 3;
+}
+
 /* 🌸 桜アニメーション */
 .sakura-container {
   position: fixed;
@@ -21,7 +69,6 @@
   will-change: transform, opacity;
 }
 
-/* 花びらの舞い方 */
 @keyframes fall {
   0% {
     transform: translateX(0) translateY(0) rotate(0deg);
@@ -35,23 +82,6 @@
     transform: translateX(-30px) translateY(100vh) rotate(360deg);
     opacity: 0.4;
   }
-}
-
-/* 🌸 Welcome画面 */
-#welcomeScreen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: linear-gradient(to bottom, #ffe6f0, #ffffff);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 32px;
-  font-weight: bold;
-  color: #cc3366;
-  z-index: 3;
 }
 
 /* 🎮 ゲームエリアとプレイヤー */

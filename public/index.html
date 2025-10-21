@@ -8,34 +8,41 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="welcomeScreen">
+  <!-- 🌸 ログイン画面 -->
+  <div id="loginScreen">
+    <h2>ログイン</h2>
+    <input type="text" id="loginName" placeholder="名前を入力">
+    <button id="loginButton">入場する</button>
+  </div>
+
+  <!-- 🌸 Welcome画面 -->
+  <div id="welcomeScreen" style="display: none;">
     <h1 id="logoText">English Park</h1>
     <div class="sakura-container"></div>
   </div>
 
+  <!-- 🎮 ゲームエリア -->
   <div id="gameArea" style="display: none;"></div>
-  <script src="script.js"></script>
+
+  <!-- ⚙️ 設定パネル -->
   <button id="settingsToggle">⚙️ 設定</button>
-<div id="settingsPanel" style="display:none;">
-  <h3>操作設定</h3>
-  <label>スティック位置:
-    <select id="stickPosition">
-      <option value="left">左下</option>
-      <option value="right">右下</option>
-    </select>
-  </label><br>
-  <label>スティックサイズ:
-    <input type="range" id="stickSize" min="50" max="120" value="80">
-  </label><br>
-  <label>マイク音量:
-    <input type="range" id="micVolume" min="0" max="1" step="0.01" value="1">
-  </label>
-</div>
+  <div id="settingsPanel" style="display:none;">
+    <h3>操作設定</h3>
+    <label>スティック位置:
+      <select id="stickPosition">
+        <option value="left">左下</option>
+        <option value="right">右下</option>
+      </select>
+    </label><br>
+    <label>スティックサイズ:
+      <input type="range" id="stickSize" min="50" max="120" value="80">
+    </label><br>
+    <label>マイク音量:
+      <input type="range" id="micVolume" min="0" max="1" step="0.01" value="1">
+    </label>
+  </div>
+
+  <!-- 🎮 スクリプト -->
+  <script src="script.js"></script>
 </body>
 </html>
-
-
-
-
-
-

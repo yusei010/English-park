@@ -35,12 +35,24 @@ function createSakura() {
 
 // 🌸 Welcome画面 → 2秒後に広場へ
 window.addEventListener("load", () => {
-  createSakura();
-  setTimeout(() => {
-    document.getElementById("welcomeScreen").style.display = "none";
-    document.getElementById("gameArea").style.display = "block";
-    startGame();
-  }, 2000);
+  const loginBtn = document.getElementById("loginButton");
+  loginBtn.addEventListener("click", () => {
+    const nameInput = document.getElementById("loginName");
+    const name = nameInput.value.trim();
+    if (name) {
+      username = name;
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("welcomeScreen").style.display = "block";
+      createSakura();
+      setTimeout(() => {
+        document.getElementById("welcomeScreen").style.display = "none";
+        document.getElementById("gameArea").style.display = "block";
+        startGame();
+      }, 2000);
+    } else {
+      alert("名前を入力してください");
+    }
+  });
 });
 
 // 🎮 広場の処理を開始
