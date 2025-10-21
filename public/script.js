@@ -1,13 +1,15 @@
+let username = ""; // ログイン後にセット
+let audioContext, gainNode;
+
 // 🌸 桜アニメーション生成
 function createSakura() {
   const container = document.querySelector(".sakura-container");
-  const images = ["sakura1.png", "sakura2.png", "sakura3.png"]; // 花びら画像のバリエーション
+  const images = ["sakura1.png", "sakura2.png", "sakura3.png"];
 
   for (let i = 0; i < 30; i++) {
     const sakura = document.createElement("div");
     sakura.className = "sakura";
 
-    // ランダムな位置・サイズ・画像
     const startLeft = Math.random() * window.innerWidth;
     const size = 20 + Math.random() * 20;
     const image = images[Math.floor(Math.random() * images.length)];
@@ -17,11 +19,10 @@ function createSakura() {
     sakura.style.height = size + "px";
     sakura.style.backgroundImage = `url(${image})`;
 
-    // ランダムなアニメーション時間・遅延・透明度・奥行き
     const duration = 6 + Math.random() * 6;
     const delay = Math.random() * 5;
     const opacity = 0.5 + Math.random() * 0.5;
-    const z = Math.floor(Math.random() * 3); // 0〜2
+    const z = Math.floor(Math.random() * 3);
 
     sakura.style.animationDuration = duration + "s";
     sakura.style.animationDelay = delay + "s";
@@ -32,8 +33,7 @@ function createSakura() {
   }
 }
 
-
-// 🌸 Welcome画面 → 2秒後に広場へ
+// 🌸 ログイン → Welcome → 広場へ
 window.addEventListener("load", () => {
   const loginBtn = document.getElementById("loginButton");
   loginBtn.addEventListener("click", () => {
@@ -59,8 +59,6 @@ window.addEventListener("load", () => {
 function startGame() {
   const socket = io();
   const gameArea = document.getElementById("gameArea");
-
-  const username = prompt("名前を入力してください") || "名無し";
   const myId = "user-" + Math.floor(Math.random() * 100000);
 
   const myPlayer = document.createElement("div");
@@ -82,7 +80,6 @@ function startGame() {
     socket.emit("move", { id: myId, name: username, x, y });
   }
 
-  // ⌨️ キーボード操作（PC用）
   document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowUp") y -= speed;
     if (e.key === "ArrowDown") y += speed;
@@ -91,7 +88,6 @@ function startGame() {
     updatePosition();
   });
 
-  // 📱 仮想スティック（スマホ用）
   const isMobile = /iPhone|iPad|Android/.test(navigator.userAgent);
   if (isMobile) {
     const stickBase = document.createElement("div");
@@ -197,12 +193,20 @@ function startGame() {
     }
   });
 
-  // 🎙️ PeerJS 音声通話（双方向・反響防止）
-  let peer;
+  // 🎙️ PeerJS 音声通話 + 音量調整
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
     localStream = stream;
 
-    peer = new Peer(myId, {
+    audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    gainNode = audioContext.createGain();
+    source.connect(gainNode).connect(audioContext.destination);
+
+    document.getElementById("micVolume").addEventListener("input", e => {
+      gainNode.gain.value = parseFloat(e.target.value);
+    });
+
+    const peer = new Peer(myId, {
       host: "peerjs.com",
       port: 443,
       secure: true
@@ -218,59 +222,65 @@ function startGame() {
       call.on("stream", remoteStream => {
         const audio = new Audio();
         audio.srcObject = remoteStream;
-        audio.play().catch(e => console.log("再生エラー:", e));
-      });
-    });
-
-    socket.on("join", data => {
-      if (peer && localStream && data.id !== myId) {
-        const call = peer.call(data.id, localStream);
-        call.on("stream", remoteStream => {
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
           audio.play().catch(e => console.log("再生エラー:", e));
         });
+      });
+  
+      socket.on("join", data => {
+        if (peer && localStream && data.id !== myId) {
+          const call = peer.call(data.id, localStream);
+          call.on("stream", remoteStream => {
+            const audio = new Audio();
+            audio.srcObject = remoteStream;
+            audio.play().catch(e => console.log("再生エラー:", e));
+          });
+        }
+      });
+  
+    }).catch(err => {
+      console.error("🎤 マイク取得失敗:", err);
+      alert("マイクの使用が許可されていません。設定を確認してください。");
+    });
+  
+    // ⚙️ 設定パネルのイベント
+    document.getElementById("settingsToggle").addEventListener("click", () => {
+      const panel = document.getElementById("settingsPanel");
+      if (panel) {
+        panel.style.display = panel.style.display === "none" ? "block" : "none";
       }
     });
-
-  }).catch(err => {
-    console.error("🎤 マイク取得失敗:", err);
-    alert("マイクの使用が許可されていません。設定を確認してください。");
-  });
-
-  // ⚙️ 設定パネルのイベント
-  document.getElementById("settingsToggle").addEventListener("click", () => {
-    const panel = document.getElementById("settingsPanel");
-    panel.style.display = panel.style.display === "none" ? "block" : "none";
-  });
-
-  document.getElementById("stickPosition").addEventListener("change", e => {
-    const pos = e.target.value;
-    const base = document.getElementById("stickBase");
-    if (pos === "left") {
-      base.style.left = "20px";
-      base.style.right = "";
-    } else {
-      base.style.right = "20px";
-      base.style.left = "";
-    }
-  });
-
-  document.getElementById("stickSize").addEventListener("input", e => {
-    const size = parseInt(e.target.value);
-    const base = document.getElementById("stickBase");
-    const knob = document.getElementById("stickKnob");
-
-    const baseSize = size + "px";
-  const knobSize = size / 2 + "px";
-  const knobCenter = size / 2 + "px";
-
-  base.style.width = baseSize;
-  base.style.height = baseSize;
-  knob.style.width = knobSize;
-  knob.style.height = knobSize;
-  knob.style.left = knobCenter;
-  knob.style.top = knobCenter;
-});
-}
-
+  
+    document.getElementById("stickPosition").addEventListener("change", e => {
+      const pos = e.target.value;
+      const base = document.getElementById("stickBase");
+      if (base) {
+        if (pos === "left") {
+          base.style.left = "20px";
+          base.style.right = "";
+        } else {
+          base.style.right = "20px";
+          base.style.left = "";
+        }
+      }
+    });
+  
+    document.getElementById("stickSize").addEventListener("input", e => {
+      const size = parseInt(e.target.value);
+      const base = document.getElementById("stickBase");
+      const knob = document.getElementById("stickKnob");
+  
+      if (base && knob) {
+        const baseSize = size + "px";
+        const knobSize = size / 2 + "px";
+        const knobCenter = size / 2 + "px";
+  
+        base.style.width = baseSize;
+        base.style.height = baseSize;
+        knob.style.width = knobSize;
+        knob.style.height = knobSize;
+        knob.style.left = knobCenter;
+        knob.style.top = knobCenter;
+      }
+    });
+  }
+  
