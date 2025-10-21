@@ -208,6 +208,10 @@ function startGame() {
    const destination = audioContext.createMediaStreamDestination();
    gainNode.connect(destination);
    const processedStream = destination.stream;
+   //✅ 自分の声が processedStream に乗っているか確認
+const testAudio = new Audio();
+testAudio.srcObject = processedStream;
+testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
    document.getElementById("micVolume").addEventListener("input", e => {
       gainNode.gain.value = parseFloat(e.target.value);
     });
