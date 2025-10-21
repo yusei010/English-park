@@ -168,80 +168,91 @@ function startGame() {
     others[data.id].style.top = data.y + "px";
   });
 
-  // 🎤 マイクON/OFFボタン
-  let micEnabled = true;
-  let localStream;
+ // 🎤 マイクON/OFFボタン
+let micEnabled = true;
+let localStream;
+let audioContext, gainNode;
 
-  const micButton = document.createElement("button");
-  micButton.id = "micToggle";
-  micButton.textContent = "🎤 マイクON";
-  micButton.style.position = "fixed";
-  micButton.style.bottom = "10px";
-  micButton.style.right = "10px";
-  micButton.style.zIndex = "10";
-  micButton.style.padding = "10px";
-  micButton.style.fontSize = "16px";
-  document.body.appendChild(micButton);
+const micButton = document.createElement("button");
+micButton.id = "micToggle";
+micButton.textContent = "🎤 マイクON";
+micButton.style.position = "fixed";
+micButton.style.bottom = "10px";
+micButton.style.right = "10px";
+micButton.style.zIndex = "10";
+micButton.style.padding = "10px";
+micButton.style.fontSize = "16px";
+document.body.appendChild(micButton);
 
-  micButton.addEventListener("click", () => {
-    micEnabled = !micEnabled;
-    micButton.textContent = micEnabled ? "🎤 マイクON" : "🔇 マイクOFF";
-    if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
-        track.enabled = micEnabled;
+micButton.addEventListener("click", () => {
+  micEnabled = !micEnabled;
+  micButton.textContent = micEnabled ? "🎤 マイクON" : "🔇 マイクOFF";
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = micEnabled;
+    });
+  }
+});
+
+// 🎙️ PeerJS 音声通話（反響防止・音量調整）
+const myId = "user-" + Date.now() + "-" + Math.floor(Math.random() * 1000); // ← 一意なIDに変更
+
+navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+  localStream = stream;
+
+  // 🎧 音量調整用の AudioContext（スピーカー出力はしない）
+  audioContext = new AudioContext();
+  const source = audioContext.createMediaStreamSource(stream);
+  gainNode = audioContext.createGain();
+  source.connect(gainNode); // destination には接続しない
+
+  document.getElementById("micVolume").addEventListener("input", e => {
+    gainNode.gain.value = parseFloat(e.target.value);
+  });
+
+  const peer = new Peer(myId, {
+    host: "peerjs.com",
+    port: 443,
+    secure: true
+  });
+
+  peer.on("open", id => {
+    console.log("✅ PeerJS接続成功:", id);
+    socket.emit("join", { id: myId, name: username });
+  });
+
+  peer.on("call", call => {
+    call.answer(localStream);
+    call.on("stream", remoteStream => {
+      const audio = new Audio();
+      audio.srcObject = remoteStream;
+      audio.play().catch(e => console.log("再生エラー:", e));
+    });
+    call.on("error", err => {
+      console.error("通話エラー（受信側）:", err);
+    });
+  });
+
+  socket.on("join", data => {
+    if (peer && localStream && data.id !== myId) {
+      const call = peer.call(data.id, localStream);
+      call.on("stream", remoteStream => {
+        const audio = new Audio();
+        audio.srcObject = remoteStream;
+        audio.play().catch(e => console.log("再生エラー:", e));
+      });
+      call.on("error", err => {
+        console.error("通話エラー（発信側）:", err);
       });
     }
   });
 
-  // 🎙️ PeerJS 音声通話 + 音量調整
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    localStream = stream;
+}).catch(err => {
+  console.error("🎤 マイク取得失敗:", err);
+  alert("マイクの使用が許可されていません。設定を確認してください。");
+});
 
-    audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(stream);
-    gainNode = audioContext.createGain();
-    source.connect(gainNode).connect(audioContext.destination);
 
-    document.getElementById("micVolume").addEventListener("input", e => {
-      gainNode.gain.value = parseFloat(e.target.value);
-    });
-
-    const peer = new Peer(myId, {
-      host: "peerjs.com",
-      port: 443,
-      secure: true
-    });
-
-    peer.on("open", id => {
-      console.log("✅ PeerJS接続成功:", id);
-      socket.emit("join", { id: myId, name: username });
-    });
-
-    peer.on("call", call => {
-      call.answer(localStream);
-      call.on("stream", remoteStream => {
-        const audio = new Audio();
-        audio.srcObject = remoteStream;
-          audio.play().catch(e => console.log("再生エラー:", e));
-        });
-      });
-  
-      socket.on("join", data => {
-        if (peer && localStream && data.id !== myId) {
-          const call = peer.call(data.id, localStream);
-          call.on("stream", remoteStream => {
-            const audio = new Audio();
-            audio.srcObject = remoteStream;
-            audio.play().catch(e => console.log("再生エラー:", e));
-          });
-        }
-      });
-  
-    }).catch(err => {
-      console.error("🎤 マイク取得失敗:", err);
-      alert("マイクの使用が許可されていません。設定を確認してください。");
-    });
-  
     // ⚙️ 設定パネルのイベント
     document.getElementById("settingsToggle").addEventListener("click", () => {
       const panel = document.getElementById("settingsPanel");
