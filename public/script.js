@@ -204,8 +204,11 @@ function startGame() {
     const source = audioContext.createMediaStreamSource(stream);
     gainNode = audioContext.createGain();
     source.connect(gainNode); // destination には接続しない
-
-    document.getElementById("micVolume").addEventListener("input", e => {
+    // gainNodeの出力をMediaStreamに変換
+   const destination = audioContext.createMediaStreamDestination();
+   gainNode.connect(destination);
+   const processedStream = destination.stream;
+   document.getElementById("micVolume").addEventListener("input", e => {
       gainNode.gain.value = parseFloat(e.target.value);
     });
 
