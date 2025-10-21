@@ -252,7 +252,6 @@ function startGame() {
   });
 
   // 他プレイヤーの表示
-  const others = {};
   socket.on("move", data => {
     if (data.id === myId) return;
     if (!others[data.id]) {
