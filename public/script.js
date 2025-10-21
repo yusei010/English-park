@@ -59,8 +59,11 @@ window.addEventListener("load", () => {
 function startGame() {
   const socket = io();
   const gameArea = document.getElementById("gameArea");
-  const myId = "user-" + Math.floor(Math.random() * 100000);
 
+  // ✅ 一意なIDを1回だけ定義
+  const myId = "user-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+
+  // ✅ グローバルの username を使う
   const myPlayer = document.createElement("div");
   myPlayer.className = "player";
   myPlayer.textContent = username;
@@ -167,131 +170,140 @@ function startGame() {
     others[data.id].style.left = data.x + "px";
     others[data.id].style.top = data.y + "px";
   });
+  // 🎤 マイクON/OFFボタン
+  let micEnabled = true;
+  let localStream;
+  let audioContext, gainNode;
 
- // 🎤 マイクON/OFFボタン
-let micEnabled = true;
-let localStream;
-let audioContext, gainNode;
+  const micButton = document.createElement("button");
+  micButton.id = "micToggle";
+  micButton.textContent = "🎤 マイクON";
+  micButton.style.position = "fixed";
+  micButton.style.bottom = "10px";
+  micButton.style.right = "10px";
+  micButton.style.zIndex = "10";
+  micButton.style.padding = "10px";
+  micButton.style.fontSize = "16px";
+  document.body.appendChild(micButton);
 
-const micButton = document.createElement("button");
-micButton.id = "micToggle";
-micButton.textContent = "🎤 マイクON";
-micButton.style.position = "fixed";
-micButton.style.bottom = "10px";
-micButton.style.right = "10px";
-micButton.style.zIndex = "10";
-micButton.style.padding = "10px";
-micButton.style.fontSize = "16px";
-document.body.appendChild(micButton);
+  micButton.addEventListener("click", () => {
+    micEnabled = !micEnabled;
+    micButton.textContent = micEnabled ? "🎤 マイクON" : "🔇 マイクOFF";
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = micEnabled;
+      });
+    }
+  });
 
-micButton.addEventListener("click", () => {
-  micEnabled = !micEnabled;
-  micButton.textContent = micEnabled ? "🎤 マイクON" : "🔇 マイクOFF";
-  if (localStream) {
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = micEnabled;
+  // 🎙️ PeerJS 音声通話（反響防止・音量調整）
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    localStream = stream;
+
+    audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    gainNode = audioContext.createGain();
+    source.connect(gainNode); // destination には接続しない
+
+    document.getElementById("micVolume").addEventListener("input", e => {
+      gainNode.gain.value = parseFloat(e.target.value);
     });
-  }
-});
 
-// 🎙️ PeerJS 音声通話（反響防止・音量調整）
-const myId = "user-" + Date.now() + "-" + Math.floor(Math.random() * 1000); // ← 一意なIDに変更
-
-navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-  localStream = stream;
-
-  // 🎧 音量調整用の AudioContext（スピーカー出力はしない）
-  audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(stream);
-  gainNode = audioContext.createGain();
-  source.connect(gainNode); // destination には接続しない
-
-  document.getElementById("micVolume").addEventListener("input", e => {
-    gainNode.gain.value = parseFloat(e.target.value);
-  });
-
-  const peer = new Peer(myId, {
-    host: "peerjs.com",
-    port: 443,
-    secure: true
-  });
-
-  peer.on("open", id => {
-    console.log("✅ PeerJS接続成功:", id);
-    socket.emit("join", { id: myId, name: username });
-  });
-
-  peer.on("call", call => {
-    call.answer(localStream);
-    call.on("stream", remoteStream => {
-      const audio = new Audio();
-      audio.srcObject = remoteStream;
-      audio.play().catch(e => console.log("再生エラー:", e));
+    const peer = new Peer(myId, {
+      host: "peerjs.com",
+      port: 443,
+      secure: true
     });
-    call.on("error", err => {
-      console.error("通話エラー（受信側）:", err);
-    });
-  });
 
-  socket.on("join", data => {
-    if (peer && localStream && data.id !== myId) {
-      const call = peer.call(data.id, localStream);
+    peer.on("open", id => {
+      console.log("✅ PeerJS接続成功:", id);
+      socket.emit("join", { id: myId, name: username });
+    });
+
+    peer.on("call", call => {
+      call.answer(localStream);
       call.on("stream", remoteStream => {
         const audio = new Audio();
         audio.srcObject = remoteStream;
         audio.play().catch(e => console.log("再生エラー:", e));
       });
       call.on("error", err => {
-        console.error("通話エラー（発信側）:", err);
+        console.error("通話エラー（受信側）:", err);
       });
+    });
+
+    socket.on("join", data => {
+      if (peer && localStream && data.id !== myId) {
+        const call = peer.call(data.id, localStream);
+        call.on("stream", remoteStream => {
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play().catch(e => console.log("再生エラー:", e));
+        });
+        call.on("error", err => {
+          console.error("通話エラー（発信側）:", err);
+        });
+      }
+    });
+
+  }).catch(err => {
+    console.error("🎤 マイク取得失敗:", err);
+    alert("マイクの使用が許可されていません。設定を確認してください。");
+  });
+
+  // 他プレイヤーの表示
+  const others = {};
+  socket.on("move", data => {
+    if (data.id === myId) return;
+    if (!others[data.id]) {
+      const newPlayer = document.createElement("div");
+      newPlayer.className = "player";
+      newPlayer.textContent = data.name;
+      gameArea.appendChild(newPlayer);
+      others[data.id] = newPlayer;
+    }
+    others[data.id].style.left = data.x + "px";
+    others[data.id].style.top = data.y + "px";
+  });
+
+  // ⚙️ 設定パネルのイベント
+  document.getElementById("settingsToggle").addEventListener("click", () => {
+    const panel = document.getElementById("settingsPanel");
+    if (panel) {
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
     }
   });
 
-}).catch(err => {
-  console.error("🎤 マイク取得失敗:", err);
-  alert("マイクの使用が許可されていません。設定を確認してください。");
-});
+  document.getElementById("stickPosition").addEventListener("change", e => {
+    const pos = e.target.value;
+    const base = document.getElementById("stickBase");
+    if (base) {
+      if (pos === "left") {
+        base.style.left = "20px";
+        base.style.right = "";
+      } else {
+        base.style.right = "20px";
+        base.style.left = "";
+      }
+    }
+  });
 
+  document.getElementById("stickSize").addEventListener("input", e => {
+    const size = parseInt(e.target.value);
+    const base = document.getElementById("stickBase");
+    const knob = document.getElementById("stickKnob");
 
-    // ⚙️ 設定パネルのイベント
-    document.getElementById("settingsToggle").addEventListener("click", () => {
-      const panel = document.getElementById("settingsPanel");
-      if (panel) {
-        panel.style.display = panel.style.display === "none" ? "block" : "none";
-      }
-    });
-  
-    document.getElementById("stickPosition").addEventListener("change", e => {
-      const pos = e.target.value;
-      const base = document.getElementById("stickBase");
-      if (base) {
-        if (pos === "left") {
-          base.style.left = "20px";
-          base.style.right = "";
-        } else {
-          base.style.right = "20px";
-          base.style.left = "";
-        }
-      }
-    });
-  
-    document.getElementById("stickSize").addEventListener("input", e => {
-      const size = parseInt(e.target.value);
-      const base = document.getElementById("stickBase");
-      const knob = document.getElementById("stickKnob");
-  
-      if (base && knob) {
-        const baseSize = size + "px";
-        const knobSize = size / 2 + "px";
-        const knobCenter = size / 2 + "px";
-  
-        base.style.width = baseSize;
-        base.style.height = baseSize;
-        knob.style.width = knobSize;
-        knob.style.height = knobSize;
-        knob.style.left = knobCenter;
-        knob.style.top = knobCenter;
-      }
-    });
-  }
-  
+    if (base && knob) {
+      const baseSize = size + "px";
+      const knobSize = size / 2 + "px";
+      const knobCenter = size / 2 + "px";
+
+      base.style.width = baseSize;
+      base.style.height = baseSize;
+      knob.style.width = knobSize;
+      knob.style.height = knobSize;
+      knob.style.left = knobCenter;
+      knob.style.top = knobCenter;
+    }
+  });
+}
