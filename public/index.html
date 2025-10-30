@@ -1,18 +1,24 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>日本風の英語広場</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <title>English Park</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
   <!-- 🌸 ログイン画面 -->
   <div id="loginScreen">
-    <h2>ログイン</h2>
-    <input type="text" id="loginName" placeholder="名前を入力">
-    <button id="loginButton">入場する</button>
+    <h2>English Parkへようこそ</h2>
+    <input type="email" id="emailInput" placeholder="メールアドレス" /><br />
+    <input type="password" id="passwordInput" placeholder="パスワード" /><br />
+    <button id="signupButton">新規登録</button>
+    <button id="loginButton">ログイン</button>
   </div>
 
   <!-- 🌸 Welcome画面 -->
@@ -24,6 +30,13 @@
   <!-- 🎮 ゲームエリア -->
   <div id="gameArea" style="display: none;"></div>
 
+  <!-- 🤝 フレンド申請パネル -->
+  <div id="friendPanel" style="display: none;">
+    <h3>フレンド追加</h3>
+    <input type="text" id="friendIdInput" placeholder="相手のIDを入力" />
+    <button id="sendFriendRequest">申請する</button>
+  </div>
+
   <!-- ⚙️ 設定パネル -->
   <button id="settingsToggle">⚙️ 設定</button>
   <div id="settingsPanel" style="display:none;">
@@ -33,16 +46,17 @@
         <option value="left">左下</option>
         <option value="right">右下</option>
       </select>
-    </label><br>
+    </label><br />
     <label>スティックサイズ:
-      <input type="range" id="stickSize" min="50" max="120" value="80">
-    </label><br>
+      <input type="range" id="stickSize" min="50" max="120" value="80" />
+    </label><br />
     <label>マイク音量:
-      <input type="range" id="micVolume" min="0" max="1" step="0.01" value="1">
+      <input type="range" id="micVolume" min="0" max="1" step="0.01" value="1" />
     </label>
   </div>
 
-  <!-- 🎮 スクリプト -->
+  <!-- 🔌 スクリプト読み込み（順番が重要） -->
+  <script src="auth.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

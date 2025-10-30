@@ -56,12 +56,14 @@ window.addEventListener("load", () => {
 });
 
 // 🎮 広場の処理を開始
-function startGame() {
+function startGame(userId) {
+  const myId = userId;
   const socket = io();
   const gameArea = document.getElementById("gameArea");
+  gameArea.style.display = "block";
 
   // ✅ 一意なIDを1回だけ定義
-  const myId = "user-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+  const myId = userId; // ← Firebaseの一意なIDを使う
 
   // ✅ グローバルの username を使う
   const myPlayer = document.createElement("div");
@@ -195,6 +197,27 @@ function startGame() {
       });
     }
   });
+  // ✅ フレンド申請処理（ここに追加！）
+  const friendPanel = document.getElementById("friendPanel");
+  friendPanel.style.display = "block";
+
+  document.getElementById("sendFriendRequest").addEventListener("click", () => {
+    const targetId = document.getElementById("friendIdInput").value.trim();
+    if (!targetId) return alert("相手のIDを入力してください");
+
+    firebase.firestore().collection("friends").add({
+      from: myId,
+      to: targetId,
+      status: "pending",
+      requestedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(() => {
+      alert("申請を送信しました！");
+    }).catch(err => {
+      console.error("申請失敗:", err);
+      alert("申請に失敗しました");
+    });
+  });
+}
 
   // 🎙️ PeerJS 音声通話（反響防止・音量調整）
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
@@ -208,7 +231,7 @@ function startGame() {
    const destination = audioContext.createMediaStreamDestination();
    gainNode.connect(destination);
    const processedStream = destination.stream;
-   //✅ 自分の声が processedStream に乗っているか確認
+   //✅ 自分の声が processedStream に乗っているか確認(後で消す)
 const testAudio = new Audio();
 testAudio.srcObject = processedStream;
 testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
@@ -312,4 +335,3 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
       knob.style.top = knobCenter;
     }
   });
-}
