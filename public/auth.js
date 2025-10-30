@@ -1,9 +1,9 @@
 // 🔥 Firebase初期化
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDQypYYlRIPBRRTNf_shVcOzl0h5n0OBus",
+  authDomain: "english-park-f65d5.firebaseapp.com",
+  projectId: "english-park-f65d5",
+  appId: "1:522423703619:web:90ff48520d2008fbc89cf6"
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
