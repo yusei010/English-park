@@ -1,4 +1,5 @@
 let username = ""; // ログイン後にセット
+let myId = "";     // Firebase UIDを受け取るためにグローバル化
 let audioContext, gainNode;
 
 // 🌸 桜アニメーション生成
@@ -47,7 +48,7 @@ window.addEventListener("load", () => {
       setTimeout(() => {
         document.getElementById("welcomeScreen").style.display = "none";
         document.getElementById("gameArea").style.display = "block";
-        startGame();
+        startGame(myId);
       }, 2000);
     } else {
       alert("名前を入力してください");
@@ -57,11 +58,10 @@ window.addEventListener("load", () => {
 
 // 🎮 広場の処理を開始
 function startGame(userId) {
-  const myId = userId;
+  myId = userId; // ✅ グローバルに代入
   const socket = io();
   const gameArea = document.getElementById("gameArea");
   gameArea.style.display = "block";
-
 
 
   // ✅ グローバルの username を使う
@@ -174,7 +174,6 @@ function startGame(userId) {
   // 🎤 マイクON/OFFボタン
   let micEnabled = true;
   let localStream;
-  let audioContext, gainNode;
 
   const micButton = document.createElement("button");
   micButton.id = "micToggle";
@@ -196,27 +195,24 @@ function startGame(userId) {
       });
     }
   });
-  // ✅ フレンド申請処理（ここに追加！）
-  const friendPanel = document.getElementById("friendPanel");
-  friendPanel.style.display = "block";
-
-  document.getElementById("sendFriendRequest").addEventListener("click", () => {
-    const targetId = document.getElementById("friendIdInput").value.trim();
-    if (!targetId) return alert("相手のIDを入力してください");
-
-    firebase.firestore().collection("friends").add({
-      from: myId,
-      to: targetId,
-      status: "pending",
-      requestedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(() => {
-      alert("申請を送信しました！");
-    }).catch(err => {
-      console.error("申請失敗:", err);
-      alert("申請に失敗しました");
-    });
+ // ✅ フレンド申請処理
+ const friendPanel = document.getElementById("friendPanel");
+ friendPanel.style.display = "block";
+ document.getElementById("sendFriendRequest").addEventListener("click", () => {
+   const targetId = document.getElementById("friendIdInput").value.trim();
+   if (!targetId) return alert("相手のIDを入力してください");
+   firebase.firestore().collection("friends").add({
+     from: myId,
+     to: targetId,
+     status: "pending",
+     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
+   }).then(() => {
+     alert("申請を送信しました！");
+   }).catch(err => {
+     console.error("申請失敗:", err);
+     alert("申請に失敗しました");
+   });
   });
-}
 
   // 🎙️ PeerJS 音声通話（反響防止・音量調整）
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
@@ -320,17 +316,17 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
     const size = parseInt(e.target.value);
     const base = document.getElementById("stickBase");
     const knob = document.getElementById("stickKnob");
-
+  
     if (base && knob) {
       const baseSize = size + "px";
       const knobSize = size / 2 + "px";
       const knobCenter = size / 2 + "px";
-
+  
       base.style.width = baseSize;
       base.style.height = baseSize;
       knob.style.width = knobSize;
       knob.style.height = knobSize;
       knob.style.left = knobCenter;
       knob.style.top = knobCenter;
-    }
+    } 
   });

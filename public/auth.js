@@ -12,7 +12,8 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-let username = ""; // グローバルで定義
+let username = "";
+let myId = ""; // ✅ グローバルに定義
 
 // ✅ 新規登録処理
 document.getElementById("signupButton").addEventListener("click", () => {
@@ -29,8 +30,8 @@ document.getElementById("signupButton").addEventListener("click", () => {
 
   auth.createUserWithEmailAndPassword(email, password)
     .then(userCredential => {
-      const uid = userCredential.user.uid;
-      return db.collection("users").doc(uid).set({
+      myId = userCredential.user.uid;
+      return db.collection("users").doc(myId).set({
         email: email,
         displayName: username,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -42,7 +43,7 @@ document.getElementById("signupButton").addEventListener("click", () => {
         setTimeout(() => {
           document.getElementById("welcomeScreen").style.display = "none";
           document.getElementById("gameArea").style.display = "block";
-          startGame(uid);
+          startGame(myId); // ✅ 引数ありで呼び出す
         }, 2000);
       });
     })
@@ -67,14 +68,14 @@ document.getElementById("loginButton").addEventListener("click", () => {
 
   auth.signInWithEmailAndPassword(email, password)
     .then(userCredential => {
-      const uid = userCredential.user.uid;
+      myId = userCredential.user.uid;
       document.getElementById("loginScreen").style.display = "none";
       document.getElementById("welcomeScreen").style.display = "block";
       if (typeof createSakura === "function") createSakura();
       setTimeout(() => {
         document.getElementById("welcomeScreen").style.display = "none";
         document.getElementById("gameArea").style.display = "block";
-        startGame(uid);
+        startGame(myId); // ✅ 引数ありで呼び出す
       }, 2000);
     })
     .catch(error => {
