@@ -1,4 +1,3 @@
-// 🔥 Firebase初期化
 const firebaseConfig = {
   apiKey: "AIzaSyDQypYYlRIPBRRTNf_shVcOzl0h5n0OBus",
   authDomain: "english-park-f65d5.firebaseapp.com",
@@ -12,41 +11,55 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// ✅ 新規登録処理
+let username = ""; // グローバルで定義
+
 document.getElementById("signupButton").addEventListener("click", () => {
+  const name = document.getElementById("loginName").value.trim();
   const email = document.getElementById("emailInput").value;
   const password = document.getElementById("passwordInput").value;
+  if (!name) return alert("ユーザー名を入力してください");
+  username = name;
 
   auth.createUserWithEmailAndPassword(email, password)
     .then(userCredential => {
       const uid = userCredential.user.uid;
       return db.collection("users").doc(uid).set({
         email: email,
-        displayName: email.split("@")[0],
+        displayName: username,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         status: "online"
       }).then(() => {
-        startGame(uid);
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("welcomeScreen").style.display = "block";
+        createSakura();
+        setTimeout(() => {
+          document.getElementById("welcomeScreen").style.display = "none";
+          document.getElementById("gameArea").style.display = "block";
+          startGame(uid);
+        }, 2000);
       });
     })
-    .catch(error => {
-      console.error("登録失敗:", error);
-      alert("登録失敗: " + error.message);
-    });
+    .catch(error => alert("登録失敗: " + error.message));
 });
 
-// ✅ ログイン処理
 document.getElementById("loginButton").addEventListener("click", () => {
+  const name = document.getElementById("loginName").value.trim();
   const email = document.getElementById("emailInput").value;
   const password = document.getElementById("passwordInput").value;
+  if (!name) return alert("ユーザー名を入力してください");
+  username = name;
 
   auth.signInWithEmailAndPassword(email, password)
     .then(userCredential => {
       const uid = userCredential.user.uid;
-      startGame(uid);
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("welcomeScreen").style.display = "block";
+      createSakura();
+      setTimeout(() => {
+        document.getElementById("welcomeScreen").style.display = "none";
+        document.getElementById("gameArea").style.display = "block";
+        startGame(uid);
+      }, 2000);
     })
-    .catch(error => {
-      console.error("ログイン失敗:", error);
-      alert("ログイン失敗: " + error.message);
-    });
+    .catch(error => alert("ログイン失敗: " + error.message));
 });
