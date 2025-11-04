@@ -62,8 +62,7 @@ function startGame(userId) {
   const gameArea = document.getElementById("gameArea");
   gameArea.style.display = "block";
 
-  // ✅ 一意なIDを1回だけ定義
-  const myId = userId; // ← Firebaseの一意なIDを使う
+
 
   // ✅ グローバルの username を使う
   const myPlayer = document.createElement("div");
