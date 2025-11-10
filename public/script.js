@@ -1,3 +1,4 @@
+import { initThreeScene } from './three-setup.js';
 let username = ""; // ログイン後にセット
 let myId = "";     // Firebase UIDを受け取るためにグローバル化
 let audioContext, gainNode;
@@ -59,7 +60,10 @@ window.addEventListener("load", () => {
 // 🎮 広場の処理を開始
 function startGame(userId) {
   myId = userId; // ✅ グローバルに代入
-  const socket = io();
+  // 💡 【修正点】RenderサーバーのURLを明示的に指定
+  const SERVER_URL = "https://english-park-2f2y.onrender.com";
+  const socket = io(SERVER_URL);
+  
   const gameArea = document.getElementById("gameArea");
   gameArea.style.display = "block";
 
@@ -171,6 +175,7 @@ function startGame(userId) {
     others[data.id].style.left = data.x + "px";
     others[data.id].style.top = data.y + "px";
   });
+}
   // 🎤 マイクON/OFFボタン
   let micEnabled = true;
   let localStream;
@@ -234,6 +239,7 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
       gainNode.gain.value = parseFloat(e.target.value);
     });
 
+    // 💡 PeerJSクライアントのインスタンス化 (myIdは認証時に設定される)
     const peer = new Peer(myId, {
       host: "peerjs.com",
       port: 443,
@@ -242,9 +248,27 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
 
     peer.on("open", id => {
       console.log("✅ PeerJS接続成功:", id);
+      // 💡 Socket.IOに自分の参加を通知
+      const socket = io("https://english-park-2f2y.onrender.com");
       socket.emit("join", { id: myId, name: username });
+
+      // 💡 他プレイヤーの接続処理 (Socket.IOのjoinイベントを受信)
+      socket.on("join", data => {
+        if (peer && processedStream && data.id !== myId) {
+          const call = peer.call(data.id, processedStream);
+          call.on("stream", remoteStream => {
+            const audio = new Audio();
+            audio.srcObject = remoteStream;
+            audio.play().catch(e => console.log("再生エラー:", e));
+          });
+          call.on("error", err => {
+            console.error("通話エラー（発信側）:", err);
+          });
+        }
+      });
     });
 
+    // 💡 他プレイヤーからの着信処理 (PeerJSのcallイベントを受信)
     peer.on("call", call => {
       call.answer(processedStream);
       call.on("stream", remoteStream => {
@@ -257,26 +281,14 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
       });
     });
 
-    socket.on("join", data => {
-      if (peer && processedStream && data.id !== myId) {
-        const call = peer.call(data.id, processedStream);
-        call.on("stream", remoteStream => {
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
-          audio.play().catch(e => console.log("再生エラー:", e));
-        });
-        call.on("error", err => {
-          console.error("通話エラー（発信側）:", err);
-        });
-      }
-    });
 
   }).catch(err => {
     console.error("🎤 マイク取得失敗:", err);
     alert("マイクの使用が許可されていません。設定を確認してください。");
   });
 
-  // 他プレイヤーの表示
+  // 他プレイヤーの表示 (このブロックはstartGame関数内で定義されているため、重複を避けるためにコメントアウトまたは削除します)
+  /*
   socket.on("move", data => {
     if (data.id === myId) return;
     if (!others[data.id]) {
@@ -289,6 +301,7 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
     others[data.id].style.left = data.x + "px";
     others[data.id].style.top = data.y + "px";
   });
+  */
 
   // ⚙️ 設定パネルのイベント
   document.getElementById("settingsToggle").addEventListener("click", () => {

@@ -13,7 +13,19 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 let username = "";
-let myId = ""; // ✅ グローバルに定義
+let myId = "";
+
+// 🌸 共通：ログイン後の演出とゲーム開始
+function enterPark() {
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("welcomeScreen").style.display = "block";
+  if (typeof createSakura === "function") createSakura();
+  setTimeout(() => {
+    document.getElementById("welcomeScreen").style.display = "none";
+    document.getElementById("gameArea").style.display = "block";
+    startGame(myId); // ✅ IDを渡して広場へ
+  }, 2000);
+}
 
 // ✅ 新規登録処理
 document.getElementById("signupButton").addEventListener("click", () => {
@@ -32,20 +44,14 @@ document.getElementById("signupButton").addEventListener("click", () => {
     .then(userCredential => {
       myId = userCredential.user.uid;
       return db.collection("users").doc(myId).set({
-        email: email,
+        email,
         displayName: username,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         status: "online"
-      }).then(() => {
-        document.getElementById("loginScreen").style.display = "none";
-        document.getElementById("welcomeScreen").style.display = "block";
-        if (typeof createSakura === "function") createSakura();
-        setTimeout(() => {
-          document.getElementById("welcomeScreen").style.display = "none";
-          document.getElementById("gameArea").style.display = "block";
-          startGame(myId); // ✅ 引数ありで呼び出す
-        }, 2000);
       });
+    })
+    .then(() => {
+      enterPark(); // ✅ 共通処理で広場へ
     })
     .catch(error => {
       console.error("登録失敗:", error);
@@ -69,14 +75,7 @@ document.getElementById("loginButton").addEventListener("click", () => {
   auth.signInWithEmailAndPassword(email, password)
     .then(userCredential => {
       myId = userCredential.user.uid;
-      document.getElementById("loginScreen").style.display = "none";
-      document.getElementById("welcomeScreen").style.display = "block";
-      if (typeof createSakura === "function") createSakura();
-      setTimeout(() => {
-        document.getElementById("welcomeScreen").style.display = "none";
-        document.getElementById("gameArea").style.display = "block";
-        startGame(myId); // ✅ 引数ありで呼び出す
-      }, 2000);
+      enterPark(); // ✅ 共通処理で広場へ
     })
     .catch(error => {
       console.error("ログイン失敗:", error);
