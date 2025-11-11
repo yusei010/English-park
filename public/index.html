@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- 🌸 ログイン画面 -->
   <div id="loginScreen">
     <h2>English Parkへようこそ</h2>
     <input type="text" id="loginName" placeholder="ユーザー名" /><br />
@@ -17,23 +16,19 @@
     <button id="loginButton">ログイン</button>
   </div>
 
-  <!-- 🌸 Welcome画面 -->
   <div id="welcomeScreen" style="display: none;">
     <h1 id="logoText">English Park</h1>
     <div class="sakura-container"></div>
   </div>
 
-  <!-- 🎮 ゲームエリア -->
   <div id="gameArea" style="display: none;"></div>
 
-  <!-- 🤝 フレンド申請パネル -->
   <div id="friendPanel" style="display: none;">
     <h3>フレンド追加</h3>
     <input type="text" id="friendIdInput" placeholder="相手のIDを入力" />
     <button id="sendFriendRequest">申請する</button>
   </div>
 
-  <!-- ⚙️ 設定パネル -->
   <button id="settingsToggle">⚙️ 設定</button>
   <div id="settingsPanel" style="display:none;">
     <h3>操作設定</h3>
@@ -51,18 +46,17 @@
     </label>
   </div>
 
-  <!-- 🔌 スクリプト読み込み（順番が重要） -->
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
   
   <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  
-  <script src="auth.js"></script>
-  <script src="script.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script type="module" src="three-setup.js"></script>
 
-</body>
+  <script src="auth.js"></script>
+
+  <script type="module" src="script.js"></script>
+
+  </body>
 </html>
