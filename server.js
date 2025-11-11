@@ -8,7 +8,7 @@ const server = http.createServer(app);
 // 💡 【最重要修正】CORS設定を追加し、Renderからの接続を許可
 const io = new Server(server, {
   cors: {
-    // 💡 RenderのURLを正確に指定
+    // 💡 RenderのフロントエンドURLを指定
     origin: "https://english-park-2f2y.onrender.com", 
     methods: ["GET", "POST"]
   }
@@ -22,7 +22,7 @@ io.on("connection", socket => {
   });
 
   socket.on("join", data => {
-    // 💡 参加イベントが正しくブロードキャストされていることを確認
+    // 参加イベントが正しくブロードキャスト
     socket.broadcast.emit("join", data);
   });
 });
