@@ -19,7 +19,7 @@ const io = new Server(server, {
 app.use(express.static("public"));
 
 io.on("connection", socket => {
-  console.log('User connected:', socket.id); // 接続ログの追加
+  console.log('User connected:', socket.id);
   
   // プレイヤー移動の同期
   socket.on("move", data => {
