@@ -1,10 +1,18 @@
+// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+
+// 💡 【修正点】Socket.IOのCORS設定を追加
+const io = new Server(server, {
+  cors: {
+    origin: "https://english-park-2f2y.onrender.com", 
+    methods: ["GET", "POST"]
+  }
+});
 
 app.use(express.static("public"));
 
@@ -21,4 +29,3 @@ io.on("connection", socket => {
 server.listen(process.env.PORT || 3000, () => {
   console.log("🌐 サーバー起動中");
 });
-

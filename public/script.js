@@ -248,8 +248,7 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
 
     peer.on("open", id => {
       console.log("✅ PeerJS接続成功:", id);
-      // 💡 Socket.IOに自分の参加を通知
-      const socket = io("https://english-park-2f2y.onrender.com");
+  
       socket.emit("join", { id: myId, name: username });
 
       // 💡 他プレイヤーの接続処理 (Socket.IOのjoinイベントを受信)
