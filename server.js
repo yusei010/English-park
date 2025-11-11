@@ -9,6 +9,8 @@ const server = http.createServer(app);
 // 💡 【修正点】Socket.IOのCORS設定を追加
 const io = new Server(server, {
   cors: {
+    // RenderにデプロイされたフロントエンドのURLを指定
+    // 開発環境の場合は "http://localhost:8080" など、クライアントのポートを指定
     origin: "https://english-park-2f2y.onrender.com", 
     methods: ["GET", "POST"]
   }
