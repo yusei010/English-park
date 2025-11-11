@@ -1,8 +1,8 @@
-// script.js (完全修正版)
-// 💡 【修正点】ESモジュールとしてinitThreeSceneをインポート
+// script.js (音声チャット完全対応版)
 import { initThreeScene } from './three-setup.js'; 
 
 // auth.jsと共有されるグローバル変数
+// auth.jsで定義された window.username, window.myId を使用します。
 let audioContext, gainNode;
 
 // 🌸 桜アニメーション生成
@@ -41,7 +41,6 @@ function createSakura() {
 function startGame(userId) {
   
   // 💡 3Dシーンの初期化を追加
-  // これにより、gameAreaにThree.jsのキャンバスが表示される
   try {
       initThreeScene("gameArea");
   } catch (error) {
@@ -87,8 +86,80 @@ function startGame(userId) {
 
   const isMobile = /iPhone|iPad|Android/.test(navigator.userAgent);
   if (isMobile) {
-    // 仮想スティックの作成ロジック (省略。全てstartGame関数内にあります)
-    // ...
+    const stickBase = document.createElement("div");
+    const stickKnob = document.createElement("div");
+
+    stickBase.id = "stickBase";
+    stickKnob.id = "stickKnob";
+
+    stickBase.style.position = "fixed";
+    stickBase.style.bottom = "20px";
+    stickBase.style.left = "20px";
+    stickBase.style.width = "80px";
+    stickBase.style.height = "80px";
+    stickBase.style.zIndex = "100";
+    
+    // スタイルシートで transform: translate(-50%, -50%) が適用されている前提
+    stickKnob.style.position = "absolute";
+    stickKnob.style.width = "40px";
+    stickKnob.style.height = "40px";
+    stickKnob.style.left = "40px";
+    stickKnob.style.top = "40px";
+
+    document.body.appendChild(stickBase);
+    stickBase.appendChild(stickKnob);
+
+    let dragging = false;
+    let originX = 0;
+    let originY = 0;
+    let moveInterval;
+
+    stickBase.addEventListener("touchstart", e => {
+      dragging = true;
+      const rect = stickBase.getBoundingClientRect();
+      // スティックの原点をセンターとして計算
+      originX = rect.left + rect.width / 2; 
+      originY = rect.top + rect.height / 2; 
+
+      moveInterval = setInterval(() => {
+        // ノブがベースの中心 (40, 40) からどれだけ離れているかで移動量を決定
+        const dx = (parseFloat(stickKnob.style.left) || 40) - 40;
+        const dy = (parseFloat(stickKnob.style.top) || 40) - 40;
+        
+        // 移動量を調整（速度を落としすぎないように）
+        x += dx * 0.25; 
+        y += dy * 0.25;
+        updatePosition();
+      }, 50);
+    }, { passive: false }); // passive: false でスクロール防止
+
+    stickBase.addEventListener("touchmove", e => {
+      if (!dragging) return;
+      e.preventDefault(); // スクロールを防止
+      const touch = e.touches[0];
+      
+      // タッチ位置をスティックの原点からの相対座標に変換
+      const deltaX = touch.clientX - originX;
+      const deltaY = touch.clientY - originY;
+      
+      const maxDist = 40;
+      const dist = Math.min(Math.sqrt(deltaX**2 + deltaY**2), maxDist);
+      const angle = Math.atan2(deltaY, deltaX);
+      
+      // ノブの新しい位置を計算 (ベースの中心座標 40, 40 からの相対距離)
+      const knobX = 40 + dist * Math.cos(angle);
+      const knobY = 40 + dist * Math.sin(angle);
+      
+      stickKnob.style.left = knobX + "px";
+      stickKnob.style.top = knobY + "px";
+    }, { passive: false });
+
+    stickBase.addEventListener("touchend", () => {
+      dragging = false;
+      clearInterval(moveInterval);
+      stickKnob.style.left = "40px";
+      stickKnob.style.top = "40px";
+    });
   }
 
   const others = {};
@@ -106,7 +177,7 @@ function startGame(userId) {
   });
 
 
-  // 🎤 マイクON/OFFボタン (startGame内にあるので表示されるはず)
+  // 🎤 マイクON/OFFボタン
   let micEnabled = true;
   let localStream;
 
@@ -126,13 +197,14 @@ function startGame(userId) {
     micButton.textContent = micEnabled ? "🎤 マイクON" : "🔇 マイクOFF";
     if (localStream) {
       localStream.getAudioTracks().forEach(track => {
-        track.enabled = micEnabled;
+        // トラックの有効/無効を切り替える
+        track.enabled = micEnabled; 
       });
     }
   });
 
 
-  // ✅ フレンド申請処理 (startGame内にあるので動作するはず)
+  // ✅ フレンド申請処理
   const friendPanel = document.getElementById("friendPanel");
   friendPanel.style.display = "block";
   document.getElementById("sendFriendRequest").addEventListener("click", () => {
@@ -152,16 +224,16 @@ function startGame(userId) {
     });
   });
 
-  // 🎙️ PeerJS 音声通話（反響防止・音量調整） (startGame内にあるので動作するはず)
+  // 🎙️ PeerJS 音声通話（**最重要: 他の人と話すためのロジック**）
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
     localStream = stream;
-    // ... PeerJSと音声処理ロジック (省略) ...
+
     audioContext = new AudioContext();
     const source = audioContext.createMediaStreamSource(stream);
     gainNode = audioContext.createGain();
     source.connect(gainNode); 
     
-    // gainNodeの出力をMediaStreamに変換
+    // gainNodeの出力をMediaStreamに変換 (これで音量調整が PeerJS に伝わる)
     const destination = audioContext.createMediaStreamDestination();
     gainNode.connect(destination);
     const processedStream = destination.stream;
@@ -170,7 +242,7 @@ function startGame(userId) {
       gainNode.gain.value = parseFloat(e.target.value);
     });
 
-    // PeerJS接続
+    // PeerJS接続 (myIdは認証時に設定される)
     const peer = new Peer(window.myId, {
       host: "peerjs.com",
       port: 443,
@@ -179,47 +251,63 @@ function startGame(userId) {
 
     peer.on("open", id => {
       console.log("✅ PeerJS接続成功:", id);
+      // Socket.IOに自分の参加を通知
       socket.emit("join", { id: window.myId, name: window.username }); 
     });
 
-    // 着信処理 (call.answer(processedStream))
+    // 💡 着信処理: 他のプレイヤーからコールが来た場合
     peer.on("call", call => {
-      call.answer(processedStream);
+      call.answer(processedStream); // 処理済みのストリームで応答
       call.on("stream", remoteStream => {
+        // 相手の音声ストリームを再生
         const audio = new Audio();
         audio.srcObject = remoteStream;
         audio.play().catch(e => console.log("再生エラー（受信側）:", e));
       });
+      call.on('close', () => console.log('通話が閉じられました (受信)'));
     });
 
-    // Socket.IO joinイベント処理 (peer.call())
+    // 💡 Socket.IO joinイベント処理: 新しいプレイヤーが入ってきた場合
     socket.on("join", data => {
+      // 自分自身以外で、かつPeerJSで未接続のプレイヤーに発信
       if (peer && processedStream && data.id !== window.myId) {
-        const call = peer.call(data.id, processedStream);
+        console.log(`📞 Calling new player: ${data.name} (${data.id})`);
+        
+        // PeerJSでコールを発信
+        const call = peer.call(data.id, processedStream); 
+        
         call.on("stream", remoteStream => {
+          // 相手の音声ストリームを再生
           const audio = new Audio();
           audio.srcObject = remoteStream;
           audio.play().catch(e => console.log("再生エラー（発信側）:", e));
         });
+        call.on('close', () => console.log('通話が閉じられました (発信)'));
       }
+    });
+    
+    // 💡 ユーザーが退出した場合の処理 (オプション)
+    socket.on('disconnect', (id) => {
+        // プレイヤーオブジェクトを削除する処理など
+        console.log(`User disconnected: ${id}`);
     });
 
 
   }).catch(err => {
-    // マイク拒否時でもゲームは続行させるため、ボタン作成とalert以外はスキップ
     console.error("🎤 マイク取得失敗:", err);
     alert("マイクの使用が許可されていません。設定を確認してください。");
   });
 
 
-  // ⚙️ 設定パネルのイベント (startGame内にあるので動作するはず)
+  // ⚙️ 設定パネルのイベント
   document.getElementById("settingsToggle").addEventListener("click", () => {
     const panel = document.getElementById("settingsPanel");
     if (panel) {
       panel.style.display = panel.style.display === "none" ? "block" : "none";
     }
   });
-  // ... (スティック位置・サイズ変更ロジックも省略) ...
+
+  // スティック位置変更ロジック
   document.getElementById("stickPosition").addEventListener("change", e => {
     const pos = e.target.value;
     const base = document.getElementById("stickBase");
@@ -234,6 +322,7 @@ function startGame(userId) {
     }
   });
 
+  // スティックサイズ変更ロジック
   document.getElementById("stickSize").addEventListener("input", e => {
     const size = parseInt(e.target.value);
     const base = document.getElementById("stickBase");
@@ -254,6 +343,6 @@ function startGame(userId) {
   });
 }
 
-// 💡 【重要】auth.jsから呼び出せるように、関数を window オブジェクトに公開
+// 💡 auth.jsから呼び出せるように、関数を window オブジェクトに公開
 window.createSakura = createSakura;
 window.startGame = startGame;
