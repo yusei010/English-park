@@ -1,4 +1,3 @@
-// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -6,11 +5,10 @@ const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
 
-// 💡 【修正点】Socket.IOのCORS設定を追加
+// 💡 【最重要修正】CORS設定を追加し、Renderからの接続を許可
 const io = new Server(server, {
   cors: {
-    // RenderにデプロイされたフロントエンドのURLを指定
-    // 開発環境の場合は "http://localhost:8080" など、クライアントのポートを指定
+    // 💡 RenderのURLを正確に指定
     origin: "https://english-park-2f2y.onrender.com", 
     methods: ["GET", "POST"]
   }
@@ -24,6 +22,7 @@ io.on("connection", socket => {
   });
 
   socket.on("join", data => {
+    // 💡 参加イベントが正しくブロードキャストされていることを確認
     socket.broadcast.emit("join", data);
   });
 });

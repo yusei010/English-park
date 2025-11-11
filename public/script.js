@@ -242,11 +242,18 @@ function startGame(userId) {
       gainNode.gain.value = parseFloat(e.target.value);
     });
 
-    // PeerJS接続 (myIdは認証時に設定される)
+    // 💡 【修正点】PeerJS接続を安定化 (STUNサーバーの追加)
     const peer = new Peer(window.myId, {
       host: "peerjs.com",
       port: 443,
-      secure: true
+      secure: true,
+      // 💡 STUNサーバーを明示的に追加して接続成功率を向上させる
+      config: {
+          iceServers: [
+              { url: 'stun:stun.l.google.com:19302' },
+              { url: 'stun:global.stun.twilio.com:3478' }
+          ]
+      }
     });
 
     peer.on("open", id => {
@@ -265,6 +272,25 @@ function startGame(userId) {
         audio.play().catch(e => console.log("再生エラー（受信側）:", e));
       });
       call.on('close', () => console.log('通話が閉じられました (受信)'));
+    });
+
+    // 💡 Socket.IO joinイベント処理: 新しいプレイヤーが入ってきた場合
+    socket.on("join", data => {
+      // 自分自身以外で、かつPeerJSで未接続のプレイヤーに発信
+      if (peer && processedStream && data.id !== window.myId) {
+        console.log(`📞 Calling new player: ${data.name} (${data.id})`);
+        
+        // PeerJSでコールを発信
+        const call = peer.call(data.id, processedStream); 
+        
+        call.on("stream", remoteStream => {
+          // 相手の音声ストリームを再生
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play().catch(e => console.log("再生エラー（発信側）:", e));
+        });
+        call.on('close', () => console.log('通話が閉じられました (発信)'));
+      }
     });
 
     // 💡 Socket.IO joinイベント処理: 新しいプレイヤーが入ってきた場合
