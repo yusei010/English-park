@@ -1,6 +1,8 @@
+// script.js (完全修正版)
 import { initThreeScene } from './three-setup.js';
-let username = ""; // ログイン後にセット
-let myId = "";     // Firebase UIDを受け取るためにグローバル化
+
+// auth.jsと共有されるグローバル変数
+// auth.jsで定義された window.username, window.myId を使用します。
 let audioContext, gainNode;
 
 // 🌸 桜アニメーション生成
@@ -35,43 +37,21 @@ function createSakura() {
   }
 }
 
-// 🌸 ログイン → Welcome → 広場へ
-window.addEventListener("load", () => {
-  const loginBtn = document.getElementById("loginButton");
-  loginBtn.addEventListener("click", () => {
-    const nameInput = document.getElementById("loginName");
-    const name = nameInput.value.trim();
-    if (name) {
-      username = name;
-      document.getElementById("loginScreen").style.display = "none";
-      document.getElementById("welcomeScreen").style.display = "block";
-      createSakura();
-      setTimeout(() => {
-        document.getElementById("welcomeScreen").style.display = "none";
-        document.getElementById("gameArea").style.display = "block";
-        startGame(myId);
-      }, 2000);
-    } else {
-      alert("名前を入力してください");
-    }
-  });
-});
-
-// 🎮 広場の処理を開始
+// 🎮 広場の処理を開始 (auth.jsから呼び出される)
 function startGame(userId) {
-  myId = userId; // ✅ グローバルに代入
-  // 💡 【修正点】RenderサーバーのURLを明示的に指定
+  
+  // 💡 Socket.IO接続を一本化
   const SERVER_URL = "https://english-park-2f2y.onrender.com";
   const socket = io(SERVER_URL);
   
   const gameArea = document.getElementById("gameArea");
   gameArea.style.display = "block";
 
-
-  // ✅ グローバルの username を使う
+  // プレイヤーの作成
   const myPlayer = document.createElement("div");
   myPlayer.className = "player";
-  myPlayer.textContent = username;
+  // auth.jsで設定されたグローバル変数を使用
+  myPlayer.textContent = window.username; 
   gameArea.appendChild(myPlayer);
 
   let x = window.innerWidth / 2;
@@ -85,7 +65,8 @@ function startGame(userId) {
     y = Math.max(0, Math.min(y, maxY));
     myPlayer.style.left = x + "px";
     myPlayer.style.top = y + "px";
-    socket.emit("move", { id: myId, name: username, x, y });
+    // window.myId, window.username を使用
+    socket.emit("move", { id: window.myId, name: window.username, x, y });
   }
 
   document.addEventListener("keydown", (e) => {
@@ -164,7 +145,7 @@ function startGame(userId) {
 
   const others = {};
   socket.on("move", data => {
-    if (data.id === myId) return;
+    if (data.id === window.myId) return;
     if (!others[data.id]) {
       const newPlayer = document.createElement("div");
       newPlayer.className = "player";
@@ -175,7 +156,8 @@ function startGame(userId) {
     others[data.id].style.left = data.x + "px";
     others[data.id].style.top = data.y + "px";
   });
-}
+
+
   // 🎤 マイクON/OFFボタン
   let micEnabled = true;
   let localStream;
@@ -200,23 +182,26 @@ function startGame(userId) {
       });
     }
   });
- // ✅ フレンド申請処理
- const friendPanel = document.getElementById("friendPanel");
- friendPanel.style.display = "block";
- document.getElementById("sendFriendRequest").addEventListener("click", () => {
-   const targetId = document.getElementById("friendIdInput").value.trim();
-   if (!targetId) return alert("相手のIDを入力してください");
-   firebase.firestore().collection("friends").add({
-     from: myId,
-     to: targetId,
-     status: "pending",
-     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
-   }).then(() => {
-     alert("申請を送信しました！");
-   }).catch(err => {
-     console.error("申請失敗:", err);
-     alert("申請に失敗しました");
-   });
+
+
+  // ✅ フレンド申請処理
+  const friendPanel = document.getElementById("friendPanel");
+  friendPanel.style.display = "block";
+  document.getElementById("sendFriendRequest").addEventListener("click", () => {
+    const targetId = document.getElementById("friendIdInput").value.trim();
+    if (!targetId) return alert("相手のIDを入力してください");
+    // Firebaseはauth.jsで初期化済み
+    firebase.firestore().collection("friends").add({
+      from: window.myId,
+      to: targetId,
+      status: "pending",
+      requestedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(() => {
+      alert("申請を送信しました！");
+    }).catch(err => {
+      console.error("申請失敗:", err);
+      alert("申請に失敗しました");
+    });
   });
 
   // 🎙️ PeerJS 音声通話（反響防止・音量調整）
@@ -226,21 +211,24 @@ function startGame(userId) {
     audioContext = new AudioContext();
     const source = audioContext.createMediaStreamSource(stream);
     gainNode = audioContext.createGain();
-    source.connect(gainNode); // destination には接続しない
+    source.connect(gainNode); 
+    
     // gainNodeの出力をMediaStreamに変換
-   const destination = audioContext.createMediaStreamDestination();
-   gainNode.connect(destination);
-   const processedStream = destination.stream;
-   //✅ 自分の声が processedStream に乗っているか確認(後で消す)
-const testAudio = new Audio();
-testAudio.srcObject = processedStream;
-testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
-   document.getElementById("micVolume").addEventListener("input", e => {
+    const destination = audioContext.createMediaStreamDestination();
+    gainNode.connect(destination);
+    const processedStream = destination.stream;
+    
+    // ✅ 自分の声が processedStream に乗っているか確認(後で消す)
+    const testAudio = new Audio();
+    testAudio.srcObject = processedStream;
+    testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
+
+    document.getElementById("micVolume").addEventListener("input", e => {
       gainNode.gain.value = parseFloat(e.target.value);
     });
 
     // 💡 PeerJSクライアントのインスタンス化 (myIdは認証時に設定される)
-    const peer = new Peer(myId, {
+    const peer = new Peer(window.myId, {
       host: "peerjs.com",
       port: 443,
       secure: true
@@ -248,23 +236,8 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
 
     peer.on("open", id => {
       console.log("✅ PeerJS接続成功:", id);
-  
-      socket.emit("join", { id: myId, name: username });
-
-      // 💡 他プレイヤーの接続処理 (Socket.IOのjoinイベントを受信)
-      socket.on("join", data => {
-        if (peer && processedStream && data.id !== myId) {
-          const call = peer.call(data.id, processedStream);
-          call.on("stream", remoteStream => {
-            const audio = new Audio();
-            audio.srcObject = remoteStream;
-            audio.play().catch(e => console.log("再生エラー:", e));
-          });
-          call.on("error", err => {
-            console.error("通話エラー（発信側）:", err);
-          });
-        }
-      });
+      // 💡 Socket.IOに自分の参加を通知 (startGame内で定義されたsocket変数を使用)
+      socket.emit("join", { id: window.myId, name: window.username }); 
     });
 
     // 💡 他プレイヤーからの着信処理 (PeerJSのcallイベントを受信)
@@ -273,11 +246,28 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
       call.on("stream", remoteStream => {
         const audio = new Audio();
         audio.srcObject = remoteStream;
-        audio.play().catch(e => console.log("再生エラー:", e));
+        audio.play().catch(e => console.log("再生エラー（受信側）:", e));
       });
       call.on("error", err => {
         console.error("通話エラー（受信側）:", err);
       });
+    });
+
+    // 💡 他プレイヤーの接続処理 (Socket.IOのjoinイベントを受信)
+    socket.on("join", data => {
+      // 💡 joinイベントは全プレイヤーに届くため、自分自身以外で、かつPeerJSで未接続のプレイヤーに発信
+      if (peer && processedStream && data.id !== window.myId) {
+        console.log(`📞 Calling new player: ${data.name} (${data.id})`);
+        const call = peer.call(data.id, processedStream);
+        call.on("stream", remoteStream => {
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play().catch(e => console.log("再生エラー（発信側）:", e));
+        });
+        call.on("error", err => {
+          console.error("通話エラー（発信側）:", err);
+        });
+      }
     });
 
 
@@ -286,21 +276,6 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
     alert("マイクの使用が許可されていません。設定を確認してください。");
   });
 
-  // 他プレイヤーの表示 (このブロックはstartGame関数内で定義されているため、重複を避けるためにコメントアウトまたは削除します)
-  /*
-  socket.on("move", data => {
-    if (data.id === myId) return;
-    if (!others[data.id]) {
-      const newPlayer = document.createElement("div");
-      newPlayer.className = "player";
-      newPlayer.textContent = data.name;
-      gameArea.appendChild(newPlayer);
-      others[data.id] = newPlayer;
-    }
-    others[data.id].style.left = data.x + "px";
-    others[data.id].style.top = data.y + "px";
-  });
-  */
 
   // ⚙️ 設定パネルのイベント
   document.getElementById("settingsToggle").addEventListener("click", () => {
@@ -342,3 +317,7 @@ testAudio.play().catch(e => console.log("自分の声再生エラー:", e));
       knob.style.top = knobCenter;
     } 
   });
+}
+// 💡 auth.jsからアクセスできるように、関数を window オブジェクトに公開
+window.createSakura = createSakura;
+window.startGame = startGame;
