@@ -1,6 +1,6 @@
 // script.js (LiveKit対応版 - 最終版)
 import { initThreeScene } from './three-setup.js'; 
-import * as LivekitClient from 'livekit-client';
+import * as LivekitClient from 'https://cdn.jsdelivr.net/npm/livekit-client@2.2.0/dist/livekit-client.esm.js';
 let livekitRoom;
 const dataChannelName = 'movement'; 
 
