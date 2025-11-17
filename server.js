@@ -10,7 +10,7 @@ const server = http.createServer(app);
 // 🔑 ユーザーが提供したLiveKit認証情報
 // ⚠️ 本番環境ではRenderの環境変数として設定することを強く推奨します。
 const LIVEKIT_URL = 'wss://english-park-gqi2vk5t.livekit.cloud';
-const LIVEKIT_API_KEY = 'APIgad7md2mywSK'; 
+const LIVEKIT_API_KEY = 'gad7md2mywSK'; 
 const LIVEKIT_SECRET_KEY = '8OXs1M2SrfmbgyMX4N0fJkYdMeMF09Yqny9wOI1eJK2B';
 
 app.use(express.static("public"));
