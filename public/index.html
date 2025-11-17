@@ -42,7 +42,7 @@
       <input type="range" id="stickSize" min="50" max="120" value="80" />
     </label><br />
     <label>マイク音量:
-      <input type="range" id="micVolume" min="0" max="1" step="0.01" value="1" />
+      <input type="range" id="micVolume" min="0" max="1" step="0.01" value="1" disabled title="LiveKitではクライアント側の音量調整はサポートされていません" />
     </label>
   </div>
 
@@ -50,13 +50,12 @@
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
   
-  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.js"></script>
 
   <script src="auth.js"></script>
+  <script src="script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script type="module" src="three-setup.js"></script>
 
-  <script type="module" src="script.js"></script>
-
-  </body>
+</body>
 </html>

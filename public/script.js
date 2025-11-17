@@ -1,11 +1,9 @@
-// script.js (音声チャット完全対応版)
+// script.js (LiveKit対応版 - 最終版)
 import { initThreeScene } from './three-setup.js'; 
 
-// auth.jsと共有されるグローバル変数
-// auth.jsで定義された window.username, window.myId を使用します。
-let audioContext, gainNode;
+let livekitRoom;
+const dataChannelName = 'movement'; 
 
-// 🌸 桜アニメーション生成
 function createSakura() {
   const container = document.querySelector(".sakura-container");
   const images = ["sakura1.png", "sakura2.png", "sakura3.png"];
@@ -13,58 +11,45 @@ function createSakura() {
   for (let i = 0; i < 30; i++) {
     const sakura = document.createElement("div");
     sakura.className = "sakura";
-
     const startLeft = Math.random() * window.innerWidth;
     const size = 20 + Math.random() * 20;
     const image = images[Math.floor(Math.random() * images.length)];
-
     sakura.style.left = startLeft + "px";
     sakura.style.width = size + "px";
     sakura.style.height = size + "px";
     sakura.style.backgroundImage = `url(${image})`;
-
     const duration = 6 + Math.random() * 6;
     const delay = Math.random() * 5;
     const opacity = 0.5 + Math.random() * 0.5;
     const z = Math.floor(Math.random() * 3);
-
     sakura.style.animationDuration = duration + "s";
     sakura.style.animationDelay = delay + "s";
     sakura.style.opacity = opacity;
     sakura.style.zIndex = z;
-
     container.appendChild(sakura);
   }
 }
 
-// 🎮 広場の処理を開始 (auth.jsから呼び出される)
-function startGame(userId) {
+async function startGame(userId) {
   
-  // 💡 3Dシーンの初期化を追加
   try {
       initThreeScene("gameArea");
   } catch (error) {
       console.error("Three.jsシーンの初期化に失敗:", error);
   }
-
-  // 💡 Socket.IO接続を一本化
-  const SERVER_URL = "https://english-park-2f2y.onrender.com";
-  const socket = io(SERVER_URL);
   
   const gameArea = document.getElementById("gameArea");
-  // gameArea.style.display は auth.js で block に設定されるため不要
-
-  // プレイヤーの作成 (2D表示)
   const myPlayer = document.createElement("div");
   myPlayer.className = "player";
-  // auth.jsで設定されたグローバル変数 window.username を使用
   myPlayer.textContent = window.username; 
   gameArea.appendChild(myPlayer);
 
   let x = window.innerWidth / 2;
   let y = window.innerHeight / 2;
   const speed = 10;
-
+  
+  const others = {};
+  
   function updatePosition() {
     const maxX = window.innerWidth - 80;
     const maxY = window.innerHeight - 80;
@@ -72,10 +57,14 @@ function startGame(userId) {
     y = Math.max(0, Math.min(y, maxY));
     myPlayer.style.left = x + "px";
     myPlayer.style.top = y + "px";
-    // window.myId, window.username を使用
-    socket.emit("move", { id: window.myId, name: window.username, x, y });
-  }
 
+    if (livekitRoom && livekitRoom.state === LivekitClient.RoomState.Connected) {
+        const data = JSON.stringify({ x, y, name: window.username, id: window.myId });
+        const encoder = new TextEncoder();
+        livekitRoom.localParticipant.publishData(encoder.encode(data), LivekitClient.DataPacket_Kind.RELIABLE, [dataChannelName]);
+    }
+  }
+  
   document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowUp") y -= speed;
     if (e.key === "ArrowDown") y += speed;
@@ -88,27 +77,21 @@ function startGame(userId) {
   if (isMobile) {
     const stickBase = document.createElement("div");
     const stickKnob = document.createElement("div");
-
     stickBase.id = "stickBase";
     stickKnob.id = "stickKnob";
-
     stickBase.style.position = "fixed";
     stickBase.style.bottom = "20px";
     stickBase.style.left = "20px";
     stickBase.style.width = "80px";
     stickBase.style.height = "80px";
     stickBase.style.zIndex = "100";
-    
-    // スタイルシートで transform: translate(-50%, -50%) が適用されている前提
     stickKnob.style.position = "absolute";
     stickKnob.style.width = "40px";
     stickKnob.style.height = "40px";
     stickKnob.style.left = "40px";
     stickKnob.style.top = "40px";
-
     document.body.appendChild(stickBase);
     stickBase.appendChild(stickKnob);
-
     let dragging = false;
     let originX = 0;
     let originY = 0;
@@ -117,39 +100,28 @@ function startGame(userId) {
     stickBase.addEventListener("touchstart", e => {
       dragging = true;
       const rect = stickBase.getBoundingClientRect();
-      // スティックの原点をセンターとして計算
       originX = rect.left + rect.width / 2; 
       originY = rect.top + rect.height / 2; 
-
       moveInterval = setInterval(() => {
-        // ノブがベースの中心 (40, 40) からどれだけ離れているかで移動量を決定
         const dx = (parseFloat(stickKnob.style.left) || 40) - 40;
         const dy = (parseFloat(stickKnob.style.top) || 40) - 40;
-        
-        // 移動量を調整（速度を落としすぎないように）
         x += dx * 0.25; 
         y += dy * 0.25;
         updatePosition();
       }, 50);
-    }, { passive: false }); // passive: false でスクロール防止
+    }, { passive: false }); 
 
     stickBase.addEventListener("touchmove", e => {
       if (!dragging) return;
-      e.preventDefault(); // スクロールを防止
+      e.preventDefault(); 
       const touch = e.touches[0];
-      
-      // タッチ位置をスティックの原点からの相対座標に変換
       const deltaX = touch.clientX - originX;
       const deltaY = touch.clientY - originY;
-      
       const maxDist = 40;
       const dist = Math.min(Math.sqrt(deltaX**2 + deltaY**2), maxDist);
       const angle = Math.atan2(deltaY, deltaX);
-      
-      // ノブの新しい位置を計算 (ベースの中心座標 40, 40 からの相対距離)
       const knobX = 40 + dist * Math.cos(angle);
       const knobY = 40 + dist * Math.sin(angle);
-      
       stickKnob.style.left = knobX + "px";
       stickKnob.style.top = knobY + "px";
     }, { passive: false });
@@ -161,26 +133,8 @@ function startGame(userId) {
       stickKnob.style.top = "40px";
     });
   }
-
-  const others = {};
-  socket.on("move", data => {
-    if (data.id === window.myId) return;
-    if (!others[data.id]) {
-      const newPlayer = document.createElement("div");
-      newPlayer.className = "player";
-      newPlayer.textContent = data.name;
-      gameArea.appendChild(newPlayer);
-      others[data.id] = newPlayer;
-    }
-    others[data.id].style.left = data.x + "px";
-    others[data.id].style.top = data.y + "px";
-  });
-
-
-  // 🎤 マイクON/OFFボタン
-  let micEnabled = true;
-  let localStream;
-
+  
+  let micEnabled = true; 
   const micButton = document.createElement("button");
   micButton.id = "micToggle";
   micButton.textContent = "🎤 マイクON";
@@ -192,25 +146,20 @@ function startGame(userId) {
   micButton.style.fontSize = "16px";
   document.body.appendChild(micButton);
 
-  micButton.addEventListener("click", () => {
+  micButton.addEventListener("click", async () => {
     micEnabled = !micEnabled;
     micButton.textContent = micEnabled ? "🎤 マイクON" : "🔇 マイクOFF";
-    if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
-        // トラックの有効/無効を切り替える
-        track.enabled = micEnabled; 
-      });
+    if (livekitRoom) {
+        livekitRoom.localParticipant.setMicrophoneEnabled(micEnabled);
     }
   });
 
 
-  // ✅ フレンド申請処理
   const friendPanel = document.getElementById("friendPanel");
   friendPanel.style.display = "block";
   document.getElementById("sendFriendRequest").addEventListener("click", () => {
     const targetId = document.getElementById("friendIdInput").value.trim();
     if (!targetId) return alert("相手のIDを入力してください");
-    // Firebaseはauth.jsで初期化済み
     firebase.firestore().collection("friends").add({
       from: window.myId,
       to: targetId,
@@ -224,116 +173,98 @@ function startGame(userId) {
     });
   });
 
-  // 🎙️ PeerJS 音声通話（**最重要: 他の人と話すためのロジック**）
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    localStream = stream;
+  // 🎙️ LiveKit 音声通話接続ロジック
+  try {
+    // 1. サーバーからLiveKitトークンとURLを取得
+    const response = await fetch(`/token?id=${window.myId}&name=${window.username}`);
+    if (!response.ok) {
+        throw new Error("LiveKitトークンを取得できませんでした。サーバーがLiveKit SDKを使ってトークンを生成し、/tokenエンドポイントで提供しているか確認してください。");
+    }
+    const { token, livekitUrl } = await response.json();
 
-    audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(stream);
-    gainNode = audioContext.createGain();
-    source.connect(gainNode); 
-    
-    // gainNodeの出力をMediaStreamに変換 (これで音量調整が PeerJS に伝わる)
-    const destination = audioContext.createMediaStreamDestination();
-    gainNode.connect(destination);
-    const processedStream = destination.stream;
-    
-    document.getElementById("micVolume").addEventListener("input", e => {
-      gainNode.gain.value = parseFloat(e.target.value);
-    });
-
-    // 💡 【修正点】PeerJS接続を安定化 (STUNサーバーの追加)
-    const peer = new Peer(window.myId, {
-      host: "peerjs.com",
-      port: 443,
-      secure: true,
-      // 💡 STUNサーバーを明示的に追加して接続成功率を向上させる
-      config: {
-          iceServers: [
-              { url: 'stun:stun.l.google.com:19302' },
-              { url: 'stun:global.stun.twilio.com:3478' }
-          ]
-      }
-    });
-
-    peer.on("open", id => {
-      console.log("✅ PeerJS接続成功:", id);
-      // Socket.IOに自分の参加を通知
-      socket.emit("join", { id: window.myId, name: window.username }); 
-    });
-
-    // 💡 着信処理: 他のプレイヤーからコールが来た場合
-    peer.on("call", call => {
-      call.answer(processedStream); // 処理済みのストリームで応答
-      call.on("stream", remoteStream => {
-        // 相手の音声ストリームを再生
-        const audio = new Audio();
-        audio.srcObject = remoteStream;
-        audio.play().catch(e => console.log("再生エラー（受信側）:", e));
-      });
-      call.on('close', () => console.log('通話が閉じられました (受信)'));
-    });
-
-    // 💡 Socket.IO joinイベント処理: 新しいプレイヤーが入ってきた場合
-    socket.on("join", data => {
-      // 自分自身以外で、かつPeerJSで未接続のプレイヤーに発信
-      if (peer && processedStream && data.id !== window.myId) {
-        console.log(`📞 Calling new player: ${data.name} (${data.id})`);
-        
-        // PeerJSでコールを発信
-        const call = peer.call(data.id, processedStream); 
-        
-        call.on("stream", remoteStream => {
-          // 相手の音声ストリームを再生
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
-          audio.play().catch(e => console.log("再生エラー（発信側）:", e));
+    if (token) {
+        // 2. LiveKit Roomを作成
+        livekitRoom = new LivekitClient.Room({
+             adaptiveStream: true,
+             dynacast: true,
+             videoCaptureDefaults: { enabled: false }, 
+             audioCaptureDefaults: { enabled: true } 
         });
-        call.on('close', () => console.log('通話が閉じられました (発信)'));
-      }
-    });
 
-    // 💡 Socket.IO joinイベント処理: 新しいプレイヤーが入ってきた場合
-    socket.on("join", data => {
-      // 自分自身以外で、かつPeerJSで未接続のプレイヤーに発信
-      if (peer && processedStream && data.id !== window.myId) {
-        console.log(`📞 Calling new player: ${data.name} (${data.id})`);
-        
-        // PeerJSでコールを発信
-        const call = peer.call(data.id, processedStream); 
-        
-        call.on("stream", remoteStream => {
-          // 相手の音声ストリームを再生
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
-          audio.play().catch(e => console.log("再生エラー（発信側）:", e));
+        // 3. イベントリスナーの設定
+        livekitRoom.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
+            if (others[participant.identity]) {
+                others[participant.identity].remove();
+                delete others[participant.identity];
+            }
         });
-        call.on('close', () => console.log('通話が閉じられました (発信)'));
-      }
-    });
-    
-    // 💡 ユーザーが退出した場合の処理 (オプション)
-    socket.on('disconnect', (id) => {
-        // プレイヤーオブジェクトを削除する処理など
-        console.log(`User disconnected: ${id}`);
-    });
+
+        livekitRoom.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+            if (track.kind === LivekitClient.Track.Kind.Audio) {
+                const audioEl = track.attach();
+                document.body.appendChild(audioEl);
+            }
+        });
+        
+        // 💡 データチャンネル経由でデータを受信した時の処理 (位置同期)
+        livekitRoom.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind) => {
+            const decoder = new TextDecoder();
+            const dataString = decoder.decode(payload);
+            
+            try {
+                const data = JSON.parse(dataString);
+                
+                if (data.x !== undefined && data.y !== undefined && data.name) {
+                    const identity = participant.identity;
+                    
+                    if (!others[identity]) {
+                      const newPlayer = document.createElement("div");
+                      newPlayer.className = "player";
+                      newPlayer.textContent = data.name;
+                      gameArea.appendChild(newPlayer);
+                      others[identity] = newPlayer;
+                    }
+                    others[identity].style.left = data.x + "px";
+                    others[identity].style.top = data.y + "px";
+                }
+            } catch(e) {
+                console.warn("Received non-JSON data:", dataString);
+            }
+        });
+        
+
+        // 4. LiveKitルームに接続
+        await livekitRoom.connect(livekitUrl, token);
+        console.log("✅ LiveKit接続成功:", livekitRoom.sid);
+
+        // 5. 接続後、すぐにマイクを公開
+        await livekitRoom.localParticipant.setMicrophoneEnabled(true);
+        
+        // 接続が成功したら、LiveKitのデータチャンネルを確立
+        livekitRoom.localParticipant.createDataTrack(dataChannelName, LivekitClient.DataPacket_Kind.RELIABLE);
+        
+        // 初回位置情報を送信して、他の参加者に自分を認識させる
+        updatePosition();
+        
+    } else {
+        throw new Error("LiveKitトークンが見つかりません。");
+    }
+
+  } catch (err) {
+    console.error(" LiveKit接続失敗:", err);
+    alert(`LiveKit接続に失敗しました。LiveKitサーバー設定、またはマイク許可を確認してください: ${err.message}`);
+    micButton.disabled = true;
+    micButton.textContent = "❌ 通信エラー";
+  }
 
 
-  }).catch(err => {
-    console.error("🎤 マイク取得失敗:", err);
-    alert("マイクの使用が許可されていません。設定を確認してください。");
-  });
-
-
-  // ⚙️ 設定パネルのイベント
   document.getElementById("settingsToggle").addEventListener("click", () => {
     const panel = document.getElementById("settingsPanel");
     if (panel) {
       panel.style.display = panel.style.display === "none" ? "block" : "none";
     }
   });
-
-  // スティック位置変更ロジック
+  
   document.getElementById("stickPosition").addEventListener("change", e => {
     const pos = e.target.value;
     const base = document.getElementById("stickBase");
@@ -348,7 +279,6 @@ function startGame(userId) {
     }
   });
 
-  // スティックサイズ変更ロジック
   document.getElementById("stickSize").addEventListener("input", e => {
     const size = parseInt(e.target.value);
     const base = document.getElementById("stickBase");
@@ -369,6 +299,5 @@ function startGame(userId) {
   });
 }
 
-// 💡 auth.jsから呼び出せるように、関数を window オブジェクトに公開
 window.createSakura = createSakura;
 window.startGame = startGame;

@@ -20,7 +20,7 @@
   "homepage": "https://github.com/yusei010/English-park#readme",
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.8.1"
+    "livekit-server-sdk": "^2.4.0" 
   }
 }
 
