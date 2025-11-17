@@ -298,6 +298,4 @@ async function startGame(userId) {
     } 
   });
 }
-
-window.createSakura = createSakura;
-window.startGame = startGame;
+export { createSakura, startGame };

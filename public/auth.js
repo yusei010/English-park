@@ -1,4 +1,5 @@
 // 🔥 Firebase初期化
+import { startGame, createSakura } from './script.js';
 const firebaseConfig = {
   apiKey: "AIzaSyDQypYYlRIPBRRTNf_shVcOzl0h5n0OBus",
   authDomain: "english-park-f65d5.firebaseapp.com",
