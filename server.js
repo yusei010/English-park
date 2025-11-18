@@ -41,13 +41,10 @@ app.get('/token', (req, res) => {
         LIVEKIT_SECRET_KEY, 
         { identity: req.query.id, name: req.query.name, ttl: '1h' }
     );
-    
-    // 参加権限とルーム名を設定 (ルーム名は全員共通の 'english-park-room')
     at.addGrant({ roomJoin: true, room: 'english-park-room' }); 
     
     // トークンとLiveKit URLをクライアントに返す
     res.json({
-        // ✅ 修正済み: .toJwt() メソッドを呼び出して、JWT文字列を返します
         token: at.toJwt(), 
         livekitUrl: LIVEKIT_URL
     });
