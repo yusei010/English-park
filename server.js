@@ -1,4 +1,4 @@
-// server.js (LiveKit対応版 - 最終版)
+// server.js (LiveKit認証情報 直接埋め込み版 - 緊急テスト用)
 const express = require("express");
 const http = require("http");
 // 💡 LiveKit SDKをインポート (npm install livekit-server-sdk が必要)
@@ -7,32 +7,25 @@ const { AccessToken } = require('livekit-server-sdk');
 const app = express();
 const server = http.createServer(app);
 
-// 🔑 LiveKit認証情報をRenderの環境変数から読み込む
-// 環境変数: LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET を使用します
-const LIVEKIT_URL = process.env.LIVEKIT_URL;
-const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY; 
-// Renderの環境変数名に合わせて LIVEKIT_API_SECRET を使用します
-const LIVEKIT_SECRET_KEY = process.env.LIVEKIT_API_SECRET;
+// ❌ 【緊急対策】LiveKit認証情報を直接コードに埋め込みます
+// 🚨 注意: 本番環境では使わないでください！
+const LIVEKIT_URL = 'wss://english-park-gqi2vk5t.livekit.cloud';
+const LIVEKIT_API_KEY = 'eqzEZPmD6qYE';         // プレフィックス(API)を削除した値
+const LIVEKIT_SECRET_KEY = 'JDgLUtjaTZMJjFpMMDCtDncwjdM0pwVFuTK2Rf20KDY'; 
 
 // 🚨 認証情報のチェック
 if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_SECRET_KEY) {
-    console.error("❌ LiveKit 認証情報が不足しています。Renderの環境変数設定を確認してください。");
-    // 環境変数がない場合、サーバーを続行させますが、/tokenエンドポイントは失敗します。
+    // このテストコードでは、このチェックは基本的に通過します
+    console.error("❌ LiveKit 認証情報が不足しています。");
 }
 
 app.use(express.static("public"));
 
 // 💡 LiveKitトークン生成エンドポイント
-// クライアントが /token?id={UID}&name={名前} でアクセスし、認証トークンを取得します。
 app.get('/token', (req, res) => {
     
     if (!req.query.id || !req.query.name) {
         return res.status(400).send("Missing id or name query parameter.");
-    }
-
-    if (!LIVEKIT_API_KEY || !LIVEKIT_SECRET_KEY) {
-         // 環境変数がない場合、クライアントにエラーを返します
-         return res.status(500).send("Server is missing LiveKit credentials.");
     }
     
     // ユーザーIDと名前を使ってトークンを生成
@@ -51,7 +44,6 @@ app.get('/token', (req, res) => {
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log("🌐 サーバー起動中");
+  console.log("🌐 サーバー起動中 (緊急テストモード)");
   console.log(`LiveKit URL: ${LIVEKIT_URL}`);
-  console.log("認証情報: 環境変数から読み込み中...");
 });
