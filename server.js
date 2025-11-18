@@ -1,4 +1,4 @@
-// server.js (LiveKit対応版 - 認証情報埋め込み済み)
+// server.js (LiveKit対応版 - 環境変数対応済み)
 const express = require("express");
 const http = require("http");
 // 💡 LiveKit SDKをインポート (npm install livekit-server-sdk が必要)
@@ -7,11 +7,18 @@ const { AccessToken } = require('livekit-server-sdk');
 const app = express();
 const server = http.createServer(app);
 
-// 🔑 ユーザーが提供したLiveKit認証情報
-// ⚠️ 本番環境ではRenderの環境変数として設定することを強く推奨します。
-const LIVEKIT_URL = 'wss://english-park-gqi2vk5t.livekit.cloud';
-const LIVEKIT_API_KEY = 'eqzEZPmD6qYE'; 
-const LIVEKIT_SECRET_KEY = 'JDgLUtjaTZMJjFpMMDCtDncwjdM0pwVFuTK2Rf20KDY';
+// 🔑 LiveKit認証情報を環境変数から読み込む
+// ⚠️ 環境変数: LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET を使用します
+const LIVEKIT_URL = process.env.LIVEKIT_URL;
+// Renderの環境変数名に合わせて LIVEKIT_API_SECRET を使用します
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY; 
+const LIVEKIT_SECRET_KEY = process.env.LIVEKIT_API_SECRET;
+
+// 🚨 認証情報のチェック (サーバー起動時に重要なエラーを検出)
+if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_SECRET_KEY) {
+    console.error("❌ LiveKit 認証情報が不足しています。Renderの環境変数設定を確認してください。");
+    // 本番環境ではここで process.exit(1); などで停止させるのがより安全です
+}
 
 app.use(express.static("public"));
 
@@ -42,4 +49,6 @@ app.get('/token', (req, res) => {
 
 server.listen(process.env.PORT || 3000, () => {
   console.log("🌐 サーバー起動中");
+  console.log(`LiveKit URL: ${LIVEKIT_URL}`);
+  console.log("認証情報: 環境変数から読み込み中...");
 });
