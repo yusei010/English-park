@@ -1,107 +1,34 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>日本風の英語広場</title>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-    }
-    #gameArea {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      background-image: url('https://upload.wikimedia.org/wikipedia/commons/2/2f/Japanese_garden_Kyoto.jpg');
-      background-size: cover;
-    }
-    .player {
-      position: absolute;
-      width: 80px;
-      height: 80px;
-      background-image: url('https://cdn-icons-png.flaticon.com/512/921/921490.png');
-      background-size: cover;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>日本風の英語広場</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            /* 背景のスタイリング（省略） */
+        }
+        #gameArea {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-image: url('https://upload.wikimedia.org/wikipedia/commons/2/2f/Japanese_garden_Kyoto.jpg');
+            background-size: cover;
+        }
+        .player {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background-image: url('https://cdn-icons-png.flaticon.com/512/921/921490.png');
+            background-size: cover;
+        }
+    </style>
 </head>
 <body>
-  <div id="gameArea"></div>
+    <div id="gameArea"></div>
 
-  <script>
-    const socket = io(); // サーバーと接続
-    const gameArea = document.getElementById("gameArea");
-
-    const myId = "user-" + Math.floor(Math.random() * 100000);
-    const myPlayer = document.createElement("div");
-    myPlayer.className = "player";
-    gameArea.appendChild(myPlayer);
-
-    let x = window.innerWidth / 2;
-    let y = window.innerHeight / 2;
-    const speed = 10;
-
-    function updatePosition() {
-      myPlayer.style.left = x + "px";
-      myPlayer.style.top = y + "px";
-      socket.emit("move", { id: myId, x, y });
-    }
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowUp") y -= speed;
-      if (e.key === "ArrowDown") y += speed;
-      if (e.key === "ArrowLeft") x -= speed;
-      if (e.key === "ArrowRight") x += speed;
-      updatePosition();
-    });
-
-    const others = {};
-
-    socket.on("move", data => {
-      if (data.id === myId) return;
-      if (!others[data.id]) {
-        const newPlayer = document.createElement("div");
-        newPlayer.className = "player";
-        gameArea.appendChild(newPlayer);
-        others[data.id] = newPlayer;
-      }
-      others[data.id].style.left = data.x + "px";
-      others[data.id].style.top = data.y + "px";
-    });
-
-    // 音声通話（PeerJS）
-    const peer = new Peer(myId, {
-      host: "peerjs.com",
-      port: 443,
-      secure: true
-    });
-
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      peer.on("call", call => {
-        call.answer(stream);
-        call.on("stream", remoteStream => {
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
-          audio.play();
-        });
-      });
-
-      peer.on("open", () => {
-        peer.listAllPeers(peers => {
-          peers.forEach(id => {
-            if (id !== myId) {
-              const call = peer.call(id, stream);
-              call.on("stream", remoteStream => {
-                const audio = new Audio();
-                audio.srcObject = remoteStream;
-                audio.play();
-              });
-            }
-          });
-        });
-      });
-    });
-  </script>
-</body>
+    <script type="module" src="script.js"></script> 
+    
+    </body>
 </html>
