@@ -4,10 +4,9 @@ const express = require('express');
 const path = require('path');
 const { AccessToken } = require('livekit-server-sdk');
 
-const LIVEKIT_API_KEY = "APILWMth6jMpizV"; // 👈 実際のキーに置き換え
-const LIVEKIT_API_SECRET = "2MseU0foZomR2RiDaLjNM5Lmdhi1VVx3YfOodHnh9YnB"; // 👈 実際のシークレットに置き換え
-// 🔴 LiveKit URLも直接記述
-const LIVEKIT_URL = 'wss://english-park-gqi2vk5t.livekit.cloud'; // 👈 実際のURLに置き換え
+const LIVEKIT_API_KEY = "APILWMth6jMpizV"; 
+const LIVEKIT_API_SECRET = "2MseU0foZomR2RiDaLjNM5Lmdhi1VVx3YfOodHnh9YnB"; 
+const LIVEKIT_URL = 'wss://english-park-gqi2vk5t.livekit.cloud'; 
 
 // ポート設定
 const port = process.env.PORT || 3000;
@@ -15,16 +14,11 @@ const app = express();
 
 // publicフォルダを静的ファイルとして配信する設定
 app.use(express.static(path.join(__dirname, 'public')));
-
-// ----------------------------------------------------
 // 🎙️ LiveKit トークン生成エンドポイント
-// ----------------------------------------------------
 app.get('/token', (req, res) => {
     
     // 💡 環境変数チェックを削除（直書きしているため常に存在する）
-    
     const { id, name } = req.query;
-    
     if (!id || !name) {
         return res.status(400).send("User ID and Name are required.");
     }
@@ -61,9 +55,7 @@ app.get('/token', (req, res) => {
     }
 });
 
-// ----------------------------------------------------
-// 🚀 サーバー起動
-// ----------------------------------------------------
+// サーバー起動
 app.listen(port, () => {
     console.log(`🌐 サーバー起動中: http://localhost:${port}`);
     console.log(`LiveKit URL: ${LIVEKIT_URL}`);
