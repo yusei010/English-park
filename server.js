@@ -1,13 +1,13 @@
-// server.js (ルートディレクトリに配置 - 環境変数読み込みテスト用)
+// server.js (ルートディレクトリに配置 - APIキー直書きテスト用)
 
 const express = require('express');
 const path = require('path');
 const { AccessToken } = require('livekit-server-sdk');
 
-// 環境変数の設定 (RenderのEnvironment Variablesで設定されているはず)
-const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
-const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
-const LIVEKIT_URL = process.env.LIVEKIT_URL || 'wss://your-livekit-server.livekit.cloud';
+const LIVEKIT_API_KEY = "APILWMth6jMpizV"; // 👈 実際のキーに置き換え
+const LIVEKIT_API_SECRET = "2MseU0foZomR2RiDaLjNM5Lmdhi1VVx3YfOodHnh9YnB"; // 👈 実際のシークレットに置き換え
+// 🔴 LiveKit URLも直接記述
+const LIVEKIT_URL = 'wss://english-park-gqi2vk5t.livekit.cloud'; // 👈 実際のURLに置き換え
 
 // ポート設定
 const port = process.env.PORT || 3000;
@@ -21,17 +21,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ----------------------------------------------------
 app.get('/token', (req, res) => {
     
-    // ⬇️ 🔴【最重要デバッグコード】キーが読み込めているかを強制チェック
-    if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
-        // キーが読み込めていない場合、他のエラーとは違う明確なメッセージを返す
-        console.error("🔴 Render環境変数 LIVEKIT_API_KEY または SECRET が読み込めませんでした。");
-        return res.status(500).send("SERVER_ERROR_KEYS_NOT_FOUND"); 
-    }
-    // ⬆️ 🔴【最重要デバッグコード】
+    // 💡 環境変数チェックを削除（直書きしているため常に存在する）
     
     const { id, name } = req.query;
     
-    // パラメータチェック (デバッグメッセージが出た場合、ここには到達しないはず)
     if (!id || !name) {
         return res.status(400).send("User ID and Name are required.");
     }
@@ -45,13 +38,13 @@ app.get('/token', (req, res) => {
     // トークンの有効期限と権限を設定
     at.addGrant({
         roomJoin: true,
-        room: 'EnglishParkRoom', // ルーム名を固定
+        room: 'EnglishParkRoom', 
         canPublish: true,
         canSubscribe: true,
     });
     
     try {
-        // 💡 修正済み: トークンを JWT 形式の文字列に変換して返す
+        // 💡 トークンを JWT 形式の文字列に変換して返す
         const token = at.toJwt(); 
         
         console.log(`✅ Token generated for user: ${name} (${id})`);
