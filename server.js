@@ -1,70 +1,123 @@
-// server.js (ルートディレクトリに配置 - Render対応 最終版)
+// server.js (WebRTC P2P シグナリングサーバー)
 
 const express = require('express');
+const http = require('http');
+const { Server } = require("socket.io");
 const path = require('path');
-const { AccessToken } = require('livekit-server-sdk');
 
-// 💡 LiveKit キーとURLを直書き (デバッグテスト用)
-const LIVEKIT_API_KEY = "APILWMth6jMpizV";
-const LIVEKIT_API_SECRET = "2MseU0foZomR2RiDaLjNM5Lmdhi1VVx3YfOodHnh9YnB";
-const LIVEKIT_URL = 'wss://english-park-gqi2vk5t.livekit.cloud';
+// 💡 Render対応: 環境変数からポートを取得。
+const PORT = process.env.PORT || 3000; 
 
-// 💡 修正点：RenderはPORT環境変数を自動設定するため、それを確実に使用します
-const port = process.env.PORT || 10000; // Renderの標準的なフォールバック値を使用
 const app = express();
+const server = http.createServer(app);
+
+// ----------------------------------------------------
+// 🌐 Socket.IO サーバーをHTTPサーバーにアタッチ
+// ----------------------------------------------------
+// ⚠️ 本番環境ではセキュリティのためCORS設定を見直す必要があります
+const io = new Server(server, {
+    cors: {
+        origin: "*", 
+        methods: ["GET", "POST"]
+    }
+});
 
 // publicフォルダを静的ファイルとして配信する設定
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ----------------------------------------------------
-// 🎙️ LiveKit トークン生成エンドポイント
+// 📡 WebSocket (Socket.IO) シグナリングロジック
 // ----------------------------------------------------
-app.get('/token', (req, res) => {
-    
-    const { id, name } = req.query;
-    
-    // 💡 直書きしているため、キーの存在チェックは省略（デバッグテスト継続）
-    
-    if (!id || !name) {
-        return res.status(400).send("User ID and Name are required.");
-    }
-    
-    // トークンのペイロードを設定
-    const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-        identity: id, // ユーザーの一意なID (Firebase UID)
-        name: name,   // ユーザー名
-    });
-    
-    // トークンの有効期限と権限を設定
-    at.addGrant({
-        roomJoin: true,
-        room: 'EnglishParkRoom', 
-        canPublish: true,
-        canSubscribe: true,
-    });
-    
-    try {
-        // 💡 トークンを JWT 形式の文字列に変換して返す (修正済み)
-        const token = at.toJwt(); 
-        
-        console.log(`✅ Token generated for user: ${name} (${id})`);
+// ルーム内の参加者情報を保持するマップ (roomName -> [socketId1, socketId2, ...])
+const roomUsers = {}; 
 
-        res.json({
-            token: token,           // JWT形式の文字列
-            livekitUrl: LIVEKIT_URL // LiveKitのWSS URL
+io.on('connection', (socket) => {
+    console.log(`✅ 新しいユーザーが接続: ${socket.id}`);
+
+    let currentRoom = '';
+    let currentUsername = '';
+
+    // 1. ユーザーがルームに参加
+    socket.on('join', (data) => {
+        const { room, username } = data;
+        
+        if (!room) return;
+        
+        currentRoom = room;
+        currentUsername = username;
+
+        // Socket.IOの機能でルームに参加
+        socket.join(room); 
+
+        // 💡 既存の参加者全員に新しいユーザーの参加を通知
+        const existingPeers = roomUsers[room] || [];
+        
+        // 新しいユーザーに既存のユーザー全員を知らせる
+        existingPeers.forEach(peerId => {
+            // 既存のユーザーIDを新しい参加者へ送信
+            socket.emit('new_user', { peerId: peerId });
         });
         
-    } catch (error) {
-        console.error("🔴 JWT token generation failed:", error);
-        res.status(500).send("Failed to generate LiveKit token.");
-    }
+        // 既存のユーザーに新しい参加者がいることを通知
+        socket.to(room).emit('new_user', { peerId: socket.id });
+
+        // ルームの参加者リストを更新
+        roomUsers[room] = [...existingPeers, socket.id];
+        
+        console.log(`[JOIN] ${username} (${socket.id}) がルーム「${room}」に参加しました。`);
+    });
+
+
+    // 2. オファーの転送 (WebRTC接続開始のSDP情報)
+    socket.on('offer', (data) => {
+        // 特定のターゲットIDのソケットにオファーを転送
+        socket.to(data.targetId).emit('offer', {
+            sdp: data.sdp,
+            senderId: socket.id,
+            username: currentUsername
+        });
+    });
+
+    // 3. アンサーの転送 (SDPへの応答)
+    socket.on('answer', (data) => {
+        // 特定のターゲットIDのソケットにアンサーを転送
+        socket.to(data.targetId).emit('answer', {
+            sdp: data.sdp,
+            senderId: socket.id
+        });
+    });
+
+    // 4. ICE候補の転送 (接続経路情報)
+    socket.on('candidate', (data) => {
+        // 特定のターゲットIDのソケットにICE候補を転送
+        socket.to(data.targetId).emit('candidate', {
+            candidate: data.candidate,
+            senderId: socket.id
+        });
+    });
+
+    // 5. 切断時の処理
+    socket.on('disconnect', () => {
+        console.log(`❌ ユーザーが切断: ${socket.id}`);
+        
+        if (currentRoom) {
+            // 💡 ルーム内の他の参加者に退出を通知
+            socket.to(currentRoom).emit('user_left', { peerId: socket.id });
+
+            // ルームリストから削除
+            if (roomUsers[currentRoom]) {
+                roomUsers[currentRoom] = roomUsers[currentRoom].filter(id => id !== socket.id);
+            }
+        }
+    });
+
 });
 
+
 // ----------------------------------------------------
-// 🚀 サーバー起動 (RenderのPORTを使用)
+// 🚀 サーバー起動
 // ----------------------------------------------------
-app.listen(port, () => {
-    // 🌐 RenderのWebサービスログに出力される
-    console.log(`🌐 サーバー起動中 on port: ${port}`);
-    console.log(`LiveKit URL: ${LIVEKIT_URL}`);
+server.listen(PORT, () => {
+    console.log(`🌐 サーバー起動中 on port: ${PORT}`);
+    console.log('WebRTCシグナリングサーバーとして動作中です。');
 });
