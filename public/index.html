@@ -1,59 +1,91 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>English Park</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Park (WebRTC)</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    
+    <style>
+        /* スタイルはstyle.cssに記述しますが、最低限の表示用CSSを埋め込みます */
+        body { margin: 0; overflow: hidden; }
+        #gameArea { 
+            position: relative; 
+            width: 100vw; 
+            height: 100vh; 
+            background: #e0ffff; /* 薄い水色の背景 */
+        }
+        .player {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #ff69b4; /* プレイヤーの色 */
+            border: 3px solid #fff;
+            color: #fff;
+            text-align: center;
+            line-height: 80px;
+            font-weight: bold;
+            transition: all 0.1s linear; /* 移動を滑らかにする */
+        }
+        #video-container {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 50;
+        }
+        .video-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.8);
+            width: 150px; /* 自分のステータス表示用にサイズを調整 */
+        }
+        #login-form {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 30px;
+            border: 1px solid #ddd;
+            background: #fff;
+            z-index: 100;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
-  <div id="loginScreen">
-    <h2>English Parkへようこそ</h2>
-    <input type="text" id="loginName" placeholder="ユーザー名" /><br />
-    <input type="email" id="emailInput" placeholder="メールアドレス" /><br />
-    <input type="password" id="passwordInput" placeholder="パスワード" /><br />
-    <button id="signupButton">新規登録</button>
-    <button id="loginButton">ログイン</button>
-  </div>
 
-  <div id="welcomeScreen" style="display: none;">
-    <h1 id="logoText">English Park</h1>
+    <h1>English Park (WebRTC P2P版)</h1>
+
+    <div id="login-form">
+        <h2>ユーザー情報入力</h2>
+        <label for="username-input">ユーザー名:</label>
+        <input type="text" id="username-input" value="Player1"><br><br>
+        <label for="room-input">ルーム名:</label>
+        <input type="text" id="room-input" value="EnglishParkRoom"><br><br>
+        <button onclick="loginAndJoin()">ログイン＆ルーム入室</button>
+    </div>
+    
+    <div id="gameArea">
+        </div>
+
+    <div id="video-container">
+        <div class="video-box" id="local-video-box">
+            <p>🎤 自分の音声接続中</p>
+            </div>
+        
+        </div>
+
+    <div id="status" style="position: fixed; top: 10px; right: 10px; z-index: 50; background: #fff; padding: 5px;">ステータス: 未接続</div>
+    <div id="peers-info" style="position: fixed; top: 35px; right: 10px; z-index: 50; background: #fff; padding: 5px;">参加者: 1人</div>
+    
     <div class="sakura-container"></div>
-  </div>
-
-  <div id="gameArea" style="display: none;"></div>
-
-  <div id="friendPanel" style="display: none;">
-    <h3>フレンド追加</h3>
-    <input type="text" id="friendIdInput" placeholder="相手のIDを入力" />
-    <button id="sendFriendRequest">申請する</button>
-  </div>
-
-  <button id="settingsToggle">⚙️ 設定</button>
-  <div id="settingsPanel" style="display:none;">
-    <h3>操作設定</h3>
-    <label>スティック位置:
-      <select id="stickPosition">
-        <option value="left">左下</option>
-        <option value="right">右下</option>
-      </select>
-    </label><br />
-    <label>スティックサイズ:
-      <input type="range" id="stickSize" min="50" max="120" value="80" />
-    </label><br />
-    <label>マイク音量:
-      <input type="range" id="micVolume" min="0" max="1" step="0.01" value="1" disabled title="LiveKitではクライアント側の音量調整はサポートされていません" />
-    </label>
-  </div>
-
-  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
-  
-  <script type="module" src="auth.js"></script>
-  <script type="module" src="script.js"></script>
-  <script type="module" src="three-setup.js"></script>
-
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-</body>
+    
+    <script type="module" src="script.js"></script> 
+    </body>
 </html>
