@@ -8,6 +8,28 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
     
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDQypYYlRIPBRRTNf_shVcOzl0h5n0OBus",
+    authDomain: "english-park-f65d5.firebaseapp.com",
+    projectId: "english-park-f65d5",
+    storageBucket: "english-park-f65d5.appspot.com",
+    messagingSenderId: "522423703619",
+    appId: "1:522423703619:web:90ff48520d2008fbc89cf6"
+        };
+
+        // Firebase を初期化
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        
+        console.log("Firebase initialized.");
+    </script>
+
     <style>
         /* スタイルはstyle.cssに記述しますが、最低限の表示用CSSを埋め込みます */
         body { margin: 0; overflow: hidden; }
@@ -63,12 +85,23 @@
     <h1>English Park (WebRTC P2P版)</h1>
 
     <div id="login-form">
-        <h2>ユーザー情報入力</h2>
-        <label for="username-input">ユーザー名:</label>
-        <input type="text" id="username-input" value="Player1"><br><br>
+        <h2>アカウント認証</h2>
+        
+        <label for="email-input">メールアドレス:</label>
+        <input type="email" id="email-input" value="test@example.com"><br><br>
+        
+        <label for="password-input">パスワード:</label>
+        <input type="password" id="password-input" value="password123"><br><br>
+        
         <label for="room-input">ルーム名:</label>
         <input type="text" id="room-input" value="EnglishParkRoom"><br><br>
-        <button onclick="loginAndJoin()">ログイン＆ルーム入室</button>
+
+        <label for="username-input" id="username-label" style="display:none;">ユーザー名:</label>
+        <input type="text" id="username-input" style="display:none;" placeholder="新規ユーザー名"><br><br>
+
+        <button onclick="loginUser()">ログイン</button>
+        <button onclick="showRegisterForm()">新規登録</button>
+        <button id="register-button" onclick="registerUser()" style="display:none;">アカウント作成</button>
     </div>
     
     <div id="gameArea">

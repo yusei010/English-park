@@ -1,436 +1,548 @@
-// public/script.js (WebRTC P2P + 全機能統合版)
-
-import { initThreeScene } from './three-setup.js'; 
+// public/script.js
 
 // =========================================================
-// 🌐 接続設定とグローバル変数
+// 🌐 グローバル変数と初期設定
 // =========================================================
-const SERVER_URL = 'http://localhost:3000'; // ⚠️ Renderデプロイ時はRenderのURLに変更
+const SERVER_URL = 'https://english-park-2f2y.onrender.com'; // ✅ Renderの公開URL
 const socket = io(SERVER_URL); // WebSocket接続 (シグナリング用)
 
-let localStream = null; 
-let peers = {}; // 他の参加者とのRTCPeerConnectionオブジェクトを保持
-let myId = null; 
-let myUsername = '';
-let currentRoom = '';
-let micEnabled = true;
+let myId; // 自分のSocket ID
+let myUsername;
+let myPlayerElement;
+let currentRoom;
 
-const videoContainer = document.getElementById('video-container'); // local-video要素はHTMLから削除
+// プレイヤーの状態を格納 (キー: Socket ID, 値: { x, y, username, peerConnections: {} })
+const players = {}; 
+
+// PeerConnectionsを格納 (キー: 相手のSocket ID, 値: RTCPeerConnectionオブジェクト)
+const peerConnections = {}; 
+let localStream; // 自分のローカルメディアストリーム (音声のみ)
+
+const gameArea = document.getElementById('gameArea');
 const statusDiv = document.getElementById('status');
 const peersInfoDiv = document.getElementById('peers-info');
 
 // =========================================================
-// 🌸 桜のアニメーション機能 (省略せずに完全に残す)
+// 🎙️ WebRTC メディアアクセス
 // =========================================================
-function createSakura() {
-    const container = document.querySelector(".sakura-container");
-    const images = ["sakura1.png", "sakura2.png", "sakura3.png"];
 
-    if (!container) return; 
+/**
+ * ユーザーのメディアストリーム（音声のみ）を取得し、接続を準備します。
+ */
+async function getLocalMedia() {
+    try {
+        // カメラは不要なため video: false
+        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        console.log("Local audio stream obtained.");
 
-    for (let i = 0; i < 30; i++) {
-        const sakura = document.createElement("div");
-        sakura.className = "sakura";
-        const startLeft = Math.random() * window.innerWidth;
-        const size = 20 + Math.random() * 20;
-        const image = images[Math.floor(Math.random() * images.length)];
-        sakura.style.left = startLeft + "px";
-        sakura.style.width = size + "px";
-        sakura.style.height = size + "px";
-        sakura.style.backgroundImage = `url(${image})`;
-        const duration = 6 + Math.random() * 6;
-        const delay = Math.random() * 5;
-        const opacity = 0.5 + Math.random() * 0.5;
-        const z = Math.floor(Math.random() * 3);
-        sakura.style.animationDuration = duration + "s";
-        sakura.style.animationDelay = delay + "s";
-        sakura.style.opacity = opacity;
-        sakura.style.zIndex = z;
-        container.appendChild(sakura);
+        // マイクON/OFFボタンを追加
+        const micToggle = document.createElement('button');
+        micToggle.textContent = 'マイクON/OFF';
+        micToggle.style.position = 'fixed';
+        micToggle.style.bottom = '10px';
+        micToggle.style.left = '10px';
+        micToggle.onclick = toggleMic;
+        document.body.appendChild(micToggle);
+
+        document.getElementById('local-video-box').innerHTML = `<p>🎤 自分の音声接続中 (${window.username})</p>`;
+
+    } catch (error) {
+        console.error("メディアアクセスエラー:", error);
+        alert('マイクへのアクセスを許可してください。');
+        throw error;
     }
 }
 
+/**
+ * マイクのON/OFFを切り替えます。
+ */
+function toggleMic() {
+    const audioTracks = localStream.getAudioTracks();
+    if (audioTracks.length > 0) {
+        audioTracks[0].enabled = !audioTracks[0].enabled;
+        const button = document.querySelector('button[onclick="toggleMic()"]');
+        button.textContent = audioTracks[0].enabled ? 'マイクON/OFF' : 'マイクOFF (クリックでON)';
+        console.log("Mic enabled:", audioTracks[0].enabled);
+    }
+}
 
 // =========================================================
-// 🚀 ゲーム開始とWebRTC接続 (自分の映像は取得しない設定を維持)
+// 🤝 WebRTC 接続（P2P）処理
 // =========================================================
 
-async function startGame() {
-    
-    try {
-        initThreeScene("gameArea");
-    } catch (error) {
-        console.error("Three.jsシーンの初期化に失敗:", error);
-    }
+const iceConfig = {
+    'iceServers': [
+        // STUNサーバー: NATを越えるための自分のグローバルIPアドレスとポートを取得
+        { 'urls': 'stun:stun.l.google.com:19302' },
+        // 必要に応じてTURNサーバー (リレー) を追加
+        // { 'urls': 'turn:example.com:3478', 'username': 'user', 'credential': 'password' }
+    ]
+};
 
-    const gameArea = document.getElementById("gameArea");
-    const myPlayer = document.createElement("div");
-    myPlayer.className = "player";
-    myPlayer.textContent = window.username; 
-    gameArea.appendChild(myPlayer);
+/**
+ * 新しい相手と PeerConnection を作成します。
+ * @param {string} remoteId - 相手の Socket ID
+ * @param {boolean} isCaller - trueならOfferを作成
+ */
+function createPeerConnection(remoteId, isCaller) {
+    const peerConnection = new RTCPeerConnection(iceConfig);
+    peerConnections[remoteId] = peerConnection;
 
-    let x = window.innerWidth / 2;
-    let y = window.innerHeight / 2;
-    const speed = 10;
-    
-    const others = {}; 
-
-    // ----------------------------------------------------
-    // 🔄 位置情報の更新とWebRTC DataChannel送信
-    // ----------------------------------------------------
-    function updatePosition() {
-        const maxX = window.innerWidth - 80;
-        const maxY = window.innerHeight - 80;
-        x = Math.max(0, Math.min(x, maxX));
-        y = Math.max(0, Math.min(y, maxY));
-        myPlayer.style.left = x + "px";
-        myPlayer.style.top = y + "px";
-
-        const data = JSON.stringify({ x, y, name: window.username, id: window.myId });
-        
-        // すべてのピアに位置情報を送信
-        Object.values(peers).forEach(pc => {
-            if (pc.dataChannel && pc.dataChannel.readyState === 'open') {
-                pc.dataChannel.send(data);
-            }
-        });
-    }
-
-    // 2. キーボード/ジョイスティック制御ロジック
-    
-    document.addEventListener("keydown", (e) => {
-        if (e.key === "ArrowUp") y -= speed;
-        if (e.key === "ArrowDown") y += speed;
-        if (e.key === "ArrowLeft") x -= speed;
-        if (e.key === "ArrowRight") x += speed;
-        updatePosition();
+    // 自分の音声トラックを PeerConnection に追加
+    localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
     });
 
-    // 💡 モバイルジョイスティックのロジック (長いので省略しますが、前回提供した完全なロジックが入ります)
-    const isMobile = /iPhone|iPad|Android/.test(navigator.userAgent);
-    if (isMobile) {
-        const stickBase = document.createElement("div");
-        const stickKnob = document.createElement("div");
-        stickBase.id = "stickBase";
-        stickKnob.id = "stickKnob";
-        stickBase.style.position = "fixed";
-        stickBase.style.bottom = "20px";
-        stickBase.style.left = "20px";
-        stickBase.style.zIndex = "100";
-        stickKnob.style.position = "absolute";
-        document.body.appendChild(stickBase);
-        stickBase.appendChild(stickKnob);
-        
-        let dragging = false;
-        let originX = 0;
-        let originY = 0;
-        let moveInterval;
-
-        stickBase.addEventListener("touchstart", e => {
-          dragging = true;
-          const rect = stickBase.getBoundingClientRect();
-          originX = rect.left + rect.width / 2; 
-          originY = rect.top + rect.height / 2; 
-          moveInterval = setInterval(() => {
-            const dx = (parseFloat(stickKnob.style.left) || 40) - 40;
-            const dy = (parseFloat(stickKnob.style.top) || 40) - 40;
-            x += dx * 0.25; 
-            y += dy * 0.25;
-            updatePosition();
-          }, 50);
-        }, { passive: false }); 
-
-        stickBase.addEventListener("touchmove", e => {
-          if (!dragging) return;
-          e.preventDefault(); 
-          const touch = e.touches[0];
-          const deltaX = touch.clientX - originX;
-          const deltaY = touch.clientY - originY;
-          const maxDist = 40;
-          const dist = Math.min(Math.sqrt(deltaX**2 + deltaY**2), maxDist);
-          const angle = Math.atan2(deltaY, deltaX);
-          const knobX = 40 + dist * Math.cos(angle);
-          const knobY = 40 + dist * Math.sin(angle);
-          stickKnob.style.left = knobX + "px";
-          stickKnob.style.top = knobY + "px";
-        }, { passive: false });
-
-        stickBase.addEventListener("touchend", () => {
-          dragging = false;
-          clearInterval(moveInterval);
-          stickKnob.style.left = "40px";
-          stickKnob.style.top = "40px";
-        });
-    }
-
-
-    // 3. マイクON/OFFボタンのロジック
-    const micButton = document.createElement("button");
-    micButton.id = "micToggle";
-    micButton.textContent = "🎤 マイクON";
-    micButton.style.position = "fixed";
-    micButton.style.bottom = "10px";
-    micButton.style.right = "10px";
-    micButton.style.zIndex = "10";
-    micButton.style.padding = "10px";
-    micButton.style.fontSize = "16px";
-    document.body.appendChild(micButton);
-
-    micButton.addEventListener("click", async () => {
-        micEnabled = !micEnabled;
-        micButton.textContent = micEnabled ? "🎤 マイクON" : "🔇 マイクOFF";
-        
-        if (localStream) {
-            localStream.getAudioTracks().forEach(track => {
-                track.enabled = micEnabled;
+    // 1. ICE候補交換（接続経路の発見）
+    peerConnection.onicecandidate = event => {
+        if (event.candidate) {
+            socket.emit('ice-candidate', {
+                targetId: remoteId,
+                candidate: event.candidate
             });
         }
-    });
+    };
 
-    // 4. Firebaseフレンドパネルのロジック (省略しますが、前回提供した完全なロジックが入ります)
-    const friendPanel = document.getElementById("friendPanel");
-    if (friendPanel) friendPanel.style.display = "block";
-
-    const sendRequestButton = document.getElementById("sendFriendRequest");
-    if (sendRequestButton) {
-        sendRequestButton.addEventListener("click", () => {
-            // ... Firebaseフレンド申請ロジック ...
-        });
-    }
-
-    // 5. 設定パネルのロジック (省略しますが、前回提供した完全なロジックが入ります)
-    const settingsToggle = document.getElementById("settingsToggle");
-    if (settingsToggle) {
-        settingsToggle.addEventListener("click", () => {
-            // ... 設定パネル表示切替ロジック ...
-        });
-    }
-    
-    
-    // ----------------------------------------------------
-    // 🌐 WebRTC/Socket.IO接続ロジック
-    // ----------------------------------------------------
-    
-    // 6. 自分のマイクへのアクセスを取得 (映像は要求しない: video: false)
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true }); 
-        updatePosition(); 
-        
-    } catch (error) {
-        console.error('メディアアクセスまたは接続エラー:', error);
-        alert('マイクへのアクセスを許可してください。');
-        micButton.disabled = true;
-        micButton.textContent = "❌ マイクアクセス拒否";
-        return;
-    }
-    
-    // 7. DataChannel経由で受信したデータを処理
-    function handleDataChannelMessage(peerId, dataString) {
-        try {
-            const data = JSON.parse(dataString);
-            
-            if (data.x !== undefined && data.y !== undefined && data.name) {
-                const identity = peerId;
-                
-                if (!others[identity]) {
-                    const newPlayer = document.createElement("div");
-                    newPlayer.className = "player";
-                    newPlayer.textContent = data.name;
-                    gameArea.appendChild(newPlayer);
-                    others[identity] = newPlayer;
-                }
-                others[identity].style.left = data.x + "px";
-                others[identity].style.top = data.y + "px";
-            }
-        } catch(e) {
-            console.warn("Received non-JSON data:", dataString);
+    // 2. リモートストリームの受け取り（相手の音声トラック）
+    peerConnection.ontrack = event => {
+        if (event.streams && event.streams[0]) {
+            handleRemoteStream(remoteId, event.streams[0]);
         }
-    }
-    
-    // 8. 他の参加者の音声を受信した時の処理
-    function addRemoteAudio(peerId, stream) {
-        // 自分のオーディオ要素は不要ですが、リモートは必要です。
-        let audioEl = document.getElementById(`remote-audio-${peerId}`);
-        if (audioEl) audioEl.remove();
+    };
 
-        audioEl = document.createElement('audio');
-        audioEl.id = `remote-audio-${peerId}`;
-        audioEl.srcObject = stream;
-        audioEl.autoplay = true;
-        audioEl.style.display = 'none'; // 音声のみなので非表示
-        document.body.appendChild(audioEl);
-        console.log(`🎤 リモートオーディオ接続: ${peerId}`);
-        
-        // リモート参加者のステータスを video-container に追加
-        let videoBox = document.getElementById(`remote-video-box-${peerId}`);
-        if (!videoBox) {
-             videoBox = document.createElement('div');
-             videoBox.className = 'video-box';
-             videoBox.id = `remote-video-box-${peerId}`;
-             videoBox.innerHTML = `<p>🔈 参加者 (${peerId.substring(0, 4)}...)</p>`;
-             videoContainer.appendChild(videoBox);
-        }
-    }
-    
-    // 9. 参加者が退出した際の処理
-    function removeRemotePeer(peerId) {
-        if (others[peerId]) {
-            others[peerId].remove();
-            delete others[peerId];
-        }
-        const audioEl = document.getElementById(`remote-audio-${peerId}`);
-        if (audioEl) audioEl.remove();
-        
-        const videoBox = document.getElementById(`remote-video-box-${peerId}`);
-        if (videoBox) videoBox.remove();
-        
-        peersInfoDiv.textContent = `参加者: ${Object.keys(peers).length + 1}人`;
-    }
-
-
-    // 10. RTCPeerConnectionの構築 (WebRTC P2P接続のコアロジック)
-    function createPeerConnection(peerId, isOfferer) {
-        const pc = new RTCPeerConnection({
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-            ]
-        });
-        
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-        pc.ontrack = (event) => {
-            // 音声トラックを受信
-            addRemoteAudio(peerId, event.streams[0]);
-        };
-
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                socket.emit('candidate', {
-                    room: currentRoom,
-                    targetId: peerId,
-                    candidate: event.candidate
-                });
-            }
-        };
-        
-        // DataChannelの作成/受信 (位置同期用)
-        const dataChannelName = 'position-sync';
-        if (isOfferer) {
-            const dataChannel = pc.createDataChannel(dataChannelName);
-            dataChannel.onopen = () => console.log('✅ DataChannel (オファー側)が開きました。');
-            dataChannel.onmessage = (event) => handleDataChannelMessage(peerId, event.data);
-            peers[peerId].dataChannel = dataChannel;
-        } else {
-            pc.ondatachannel = (event) => {
-                const dataChannel = event.channel;
-                dataChannel.onopen = () => console.log('✅ DataChannel (アンサー側)が開きました。');
-                dataChannel.onmessage = (event) => handleDataChannelMessage(peerId, event.data);
-                peers[peerId].dataChannel = dataChannel;
-            };
-        }
-        
-        // ICEネゴシエーションが必要になった時の処理 (オファー側のみ)
-        if (isOfferer) {
-            pc.onnegotiationneeded = async () => {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
+    // 3. Offer (SDP) の作成と送信
+    if (isCaller) {
+        peerConnection.createOffer()
+            .then(offer => peerConnection.setLocalDescription(offer))
+            .then(() => {
                 socket.emit('offer', {
-                    room: currentRoom,
-                    targetId: peerId,
-                    sdp: pc.localDescription
+                    targetId: remoteId,
+                    sdp: peerConnection.localDescription
                 });
-            };
-        }
-        return pc;
+            })
+            .catch(e => console.error("Offer作成エラー:", e));
     }
 
+    // P2P接続の状態を監視（デバッグ用）
+    peerConnection.onconnectionstatechange = () => {
+        console.log(`Connection state to ${remoteId}: ${peerConnection.connectionState}`);
+        updateRemoteVideoStatus(remoteId, peerConnection.connectionState);
+    };
+}
 
-    // ----------------------------------------------------
-    // 📡 Socket.IO イベントリスナー (シグナリング処理)
-    // ----------------------------------------------------
+/**
+ * 相手の音声ストリームを受け取った時の処理
+ * @param {string} remoteId - 相手の Socket ID
+ * @param {MediaStream} stream - 相手の MediaStream (音声)
+ */
+function handleRemoteStream(remoteId, stream) {
+    let audio = document.getElementById(`audio-${remoteId}`);
     
-    socket.on('connect', () => {
-        myId = socket.id;
-        window.myId = myId; 
-        statusDiv.textContent = 'ステータス: サーバーに接続済み';
-        if (myUsername && currentRoom) {
-             socket.emit('join', { room: currentRoom, username: myUsername });
-        }
-    });
-
-    socket.on('disconnect', () => {
-        Object.values(peers).forEach(pc => pc.close());
-        peers = {};
-        peersInfoDiv.textContent = `参加者: 1人`;
-        statusDiv.textContent = 'ステータス: サーバーから切断';
-    });
-    
-    // ... (offer, answer, candidate のロジックはサーバーと連携して実行されます) ...
-    socket.on('offer', async (data) => {
-        const peerId = data.senderId;
-        const pc = createPeerConnection(peerId, false); 
-        peers[peerId] = pc;
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('answer', { room: currentRoom, targetId: peerId, sdp: pc.localDescription });
-    });
-
-    socket.on('answer', async (data) => {
-        const pc = peers[data.senderId];
-        if (pc && pc.signalingState !== 'stable') {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        }
-    });
-
-    socket.on('candidate', async (data) => {
-        const pc = peers[data.senderId];
-        if (pc) {
-            try {
-                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-            } catch (e) { console.error('ICE候補の追加に失敗:', e); }
-        }
-    });
-
-    socket.on('new_user', (data) => {
-        const peerId = data.peerId;
-        const pc = createPeerConnection(peerId, true); 
-        peers[peerId] = pc;
-        peersInfoDiv.textContent = `参加者: ${Object.keys(peers).length + 1}人`;
+    if (!audio) {
+        // 新しい <audio> 要素を作成
+        audio = document.createElement('audio');
+        audio.id = `audio-${remoteId}`;
+        audio.autoplay = true; // 自動再生
+        document.body.appendChild(audio);
         
-        const newPlayer = document.createElement("div");
-        newPlayer.className = "player";
-        newPlayer.textContent = `待機中 (${peerId.substring(0, 4)}...)`;
-        gameArea.appendChild(newPlayer);
-        others[peerId] = newPlayer; 
-    });
-
-    socket.on('user_left', (data) => {
-        const peerId = data.peerId;
-        const pc = peers[peerId];
-        if (pc) {
-            pc.close(); 
-            delete peers[peerId]; 
-            removeRemotePeer(peerId);
+        // 相手のステータス表示ボックスを更新
+        let remoteBox = document.getElementById(`remote-box-${remoteId}`);
+        if (!remoteBox) {
+            remoteBox = document.createElement('div');
+            remoteBox.id = `remote-box-${remoteId}`;
+            remoteBox.className = 'video-box remote-box';
+            document.getElementById('video-container').appendChild(remoteBox);
         }
-        peersInfoDiv.textContent = `参加者: ${Object.keys(peers).length + 1}人`;
-    });
+        remoteBox.innerHTML = `<p>🔊 ${players[remoteId]?.username || remoteId} 接続中</p>`;
+    }
+
+    // ストリームを <audio> 要素に割り当て
+    audio.srcObject = stream;
+    console.log(`Remote stream received from ${remoteId}`);
+
+    // 音量調整ロジックを追加 (位置による音量調整はここではなく、別のループで行う)
+}
+
+/**
+ * リモート接続の状態を更新します。
+ */
+function updateRemoteVideoStatus(remoteId, state) {
+    const remoteBox = document.getElementById(`remote-box-${remoteId}`);
+    const username = players[remoteId]?.username || remoteId;
     
+    if (remoteBox) {
+        let text = '';
+        if (state === 'connected') {
+            text = `🔊 ${username} (通話OK)`;
+        } else if (state === 'connecting') {
+            text = `... ${username} 接続中 ...`;
+        } else if (state === 'disconnected' || state === 'failed') {
+            text = `⚠️ ${username} 切断/エラー`;
+        } else {
+            text = `💬 ${username} の状態: ${state}`;
+        }
+        remoteBox.innerHTML = `<p>${text}</p>`;
+    }
 }
 
 // =========================================================
-// 🔒 認証/入室処理
+// ⚙️ ゲームロジックと位置情報同期
 // =========================================================
-window.loginAndJoin = async function() {
-    window.username = document.getElementById('username-input').value;
-    window.room = document.getElementById('room-input').value; 
-    currentRoom = window.room;
 
-    if (!window.username || !currentRoom) {
-        alert('ユーザー名とルーム名を入力してください。');
+// プレイヤーの初期座標と移動速度
+let playerX = 500;
+let playerY = 500;
+const speed = 10;
+const keys = {};
+
+// キー入力の監視
+document.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+});
+document.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+});
+
+/**
+ * プレイヤー要素を画面に追加します。
+ * @param {string} id - プレイヤーの Socket ID
+ * @param {string} username - ユーザー名
+ */
+function addPlayer(id, username) {
+    const playerEl = document.createElement('div');
+    playerEl.className = 'player';
+    playerEl.id = `player-${id}`;
+    playerEl.textContent = username;
+    gameArea.appendChild(playerEl);
+
+    players[id] = {
+        x: playerX, // 初期位置は自分の位置を共有
+        y: playerY,
+        username: username,
+        element: playerEl
+    };
+
+    if (id === myId) {
+        myPlayerElement = playerEl;
+        // 自分のプレイヤーは赤色にするなど
+        myPlayerElement.style.background = '#00bfff'; // 明るい青
+    }
+}
+
+/**
+ * プレイヤーの位置を更新し、サーバーに送信します。
+ */
+function updatePlayerPosition() {
+    let moved = false;
+
+    if (keys['w'] || keys['W'] || keys['ArrowUp']) {
+        playerY = Math.max(0, playerY - speed);
+        moved = true;
+    }
+    if (keys['s'] || keys['S'] || keys['ArrowDown']) {
+        playerY = Math.min(gameArea.clientHeight - 80, playerY + speed); // 80はプレイヤーの高さ
+        moved = true;
+    }
+    if (keys['a'] || keys['A'] || keys['ArrowLeft']) {
+        playerX = Math.max(0, playerX - speed);
+        moved = true;
+    }
+    if (keys['d'] || keys['D'] || keys['ArrowRight']) {
+        playerX = Math.min(gameArea.clientWidth - 80, playerX + speed); // 80はプレイヤーの幅
+        moved = true;
+    }
+
+    if (myPlayerElement) {
+        myPlayerElement.style.left = `${playerX}px`;
+        myPlayerElement.style.top = `${playerY}px`;
+    }
+
+    // 位置が変わった場合のみサーバーに送信
+    if (moved && socket.connected) {
+        socket.emit('player-move', { x: playerX, y: playerY });
+    }
+}
+
+/**
+ * ゲームループ
+ */
+function gameLoop() {
+    updatePlayerPosition();
+    // ここで音量調整ロジックなどを実行することも可能
+
+    requestAnimationFrame(gameLoop);
+}
+
+
+// =========================================================
+// 🌸 桜アニメーション (簡易版)
+// =========================================================
+
+function createSakura() {
+    const sakuraContainer = document.querySelector('.sakura-container');
+    const petal = document.createElement('div');
+    petal.className = 'petal';
+    petal.style.left = `${Math.random() * 100}vw`;
+    petal.style.animationDuration = `${Math.random() * 5 + 5}s`; // 5sから10s
+    petal.style.opacity = `${Math.random() * 0.5 + 0.5}`; // 0.5から1.0
+
+    sakuraContainer.appendChild(petal);
+
+    // 30秒後に要素を削除
+    setTimeout(() => {
+        petal.remove();
+    }, 30000);
+}
+
+// 🌸 桜の散るアニメーションを定期的に実行
+setInterval(createSakura, 500); 
+
+
+// =========================================================
+// 🚀 開始処理とメインフロー
+// =========================================================
+
+/**
+ * ゲーム開始と初期接続処理
+ */
+async function startGame() {
+    try {
+        await getLocalMedia(); // 自分のマイク接続
+        gameLoop(); // ゲームループ開始
+
+        // 初期位置をランダムに設定
+        playerX = Math.floor(Math.random() * (gameArea.clientWidth - 80));
+        playerY = Math.floor(Math.random() * (gameArea.clientHeight - 80));
+        
+        // 自分のプレイヤー要素を初期位置に配置
+        addPlayer(myId, window.username); 
+
+    } catch (e) {
+        console.error("ゲーム開始に失敗:", e);
+    }
+}
+
+
+// =========================================================
+// 📡 Socket.IO イベントハンドラ
+// =========================================================
+
+// 1. 接続成功
+socket.on('connect', () => {
+    myId = socket.id;
+    console.log('Connected to server. My ID:', myId);
+    statusDiv.textContent = 'ステータス: サーバー接続OK。ログイン待ち...';
+
+    // ログイン処理が成功した後、joinGameSessionからsocket.emit('join')が呼ばれます
+});
+
+// 2. 新しい参加者の通知
+socket.on('new-player', (data) => {
+    console.log('New player joined:', data.id, data.username);
+    
+    // プレイヤー要素を画面に追加
+    addPlayer(data.id, data.username);
+
+    // 接続処理を開始 (Offerを作成して送信)
+    createPeerConnection(data.id, true);
+    
+    peersInfoDiv.textContent = `参加者: ${Object.keys(players).length}人`;
+});
+
+// 3. 既存プレイヤーの初期情報（ルームに入った時）
+socket.on('current-players', (data) => {
+    console.log('Current players in room:', data.players);
+    // 既存プレイヤーをすべて追加し、自分から接続を確立
+    for (const id in data.players) {
+        if (id !== myId) {
+            addPlayer(id, data.players[id].username);
+            
+            // 既存プレイヤーごとに PeerConnection を作成 (Offerを送信)
+            createPeerConnection(id, true); 
+        }
+    }
+    peersInfoDiv.textContent = `参加者: ${Object.keys(players).length}人`;
+});
+
+// 4. プレイヤーの移動情報受信
+socket.on('player-move', (data) => {
+    const player = players[data.id];
+    if (player && data.id !== myId) {
+        player.x = data.x;
+        player.y = data.y;
+        player.element.style.left = `${data.x}px`;
+        player.element.style.top = `${data.y}px`;
+    }
+});
+
+// 5. プレイヤーの退出
+socket.on('player-leave', (id) => {
+    console.log('Player left:', id);
+    
+    // 1. 画面から要素を削除
+    const playerEl = document.getElementById(`player-${id}`);
+    if (playerEl) {
+        playerEl.remove();
+    }
+    
+    // 2. PeerConnection を終了
+    if (peerConnections[id]) {
+        peerConnections[id].close();
+        delete peerConnections[id];
+    }
+    
+    // 3. プレイヤー情報を削除
+    if (players[id]) {
+        delete players[id];
+    }
+    
+    // 4. リモートの音声/ステータス表示を削除
+    const audioEl = document.getElementById(`audio-${id}`);
+    if (audioEl) audioEl.remove();
+    
+    const remoteBox = document.getElementById(`remote-box-${id}`);
+    if (remoteBox) remoteBox.remove();
+
+    peersInfoDiv.textContent = `参加者: ${Object.keys(players).length}人`;
+});
+
+// =========================================================
+// 📢 WebRTC シグナリングハンドラ
+// =========================================================
+
+// 1. Offer受信 (相手からの接続要求)
+socket.on('offer', (data) => {
+    const remoteId = data.id;
+    const sdp = data.sdp;
+    
+    // Offerを作成せずにPeerConnectionを作成 (Answer側)
+    createPeerConnection(remoteId, false); 
+    const pc = peerConnections[remoteId];
+
+    // Answerを作成して送信
+    pc.setRemoteDescription(new RTCSessionDescription(sdp))
+        .then(() => pc.createAnswer())
+        .then(answer => pc.setLocalDescription(answer))
+        .then(() => {
+            socket.emit('answer', {
+                targetId: remoteId,
+                sdp: pc.localDescription
+            });
+        })
+        .catch(e => console.error("Offer受信時のエラー:", e));
+});
+
+// 2. Answer受信
+socket.on('answer', (data) => {
+    const remoteId = data.id;
+    const sdp = data.sdp;
+    const pc = peerConnections[remoteId];
+    if (pc) {
+        pc.setRemoteDescription(new RTCSessionDescription(sdp))
+            .catch(e => console.error("Answer受信時のエラー:", e));
+    }
+});
+
+// 3. ICE Candidate受信
+socket.on('ice-candidate', (data) => {
+    const remoteId = data.id;
+    const candidate = data.candidate;
+    const pc = peerConnections[remoteId];
+    if (pc && candidate) {
+        pc.addIceCandidate(new RTCIceCandidate(candidate))
+            .catch(e => console.error("ICE Candidate追加エラー:", e));
+    }
+});
+
+
+// =========================================================
+// 🔒 認証/入室処理 (Firebase対応版)
+// =========================================================
+// ⚠️ このセクションは、HTMLの <script> ブロックで定義した auth, db が利用できる前提です。
+// (index.html の <script> ブロックでグローバル変数として定義されています)
+
+const emailInput = document.getElementById('email-input');
+const passwordInput = document.getElementById('password-input');
+const usernameInput = document.getElementById('username-input');
+const usernameLabel = document.getElementById('username-label');
+const registerButton = document.getElementById('register-button');
+const roomInput = document.getElementById('room-input');
+
+
+// 1. 新規登録フォーム表示
+window.showRegisterForm = function() {
+    usernameInput.style.display = 'inline';
+    usernameLabel.style.display = 'inline';
+    registerButton.style.display = 'inline';
+    document.querySelector('button[onclick="loginUser()"]').style.display = 'none';
+    document.querySelector('button[onclick="showRegisterForm()"]').style.display = 'none';
+}
+
+// 2. 新規アカウント登録処理
+window.registerUser = async function() {
+    const email = emailInput.value;
+    const password = passwordInput.value;
+    const username = usernameInput.value;
+
+    if (!username || username.length < 3) {
+        alert('有効なユーザー名を入力してください。');
         return;
     }
+
+    try {
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        
+        // Firestoreにユーザー名とUIDを保存
+        await db.collection("users").doc(userCredential.user.uid).set({
+            username: username,
+            email: email,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        alert(`登録成功: ${username} さんとしてログインします。`);
+        // 登録成功後、そのままルームに入室
+        joinGameSession(username, roomInput.value);
+
+    } catch (error) {
+        console.error("登録エラー:", error);
+        alert(`登録エラー: ${error.message}`);
+    }
+}
+
+// 3. ログイン処理
+window.loginUser = async function() {
+    const email = emailInput.value;
+    const password = passwordInput.value;
+    
+    try {
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        const uid = userCredential.user.uid;
+
+        // Firestoreからユーザー名を取得
+        const userDoc = await db.collection("users").doc(uid).get();
+        if (!userDoc.exists) {
+            alert('ユーザーデータが見つかりません。再登録してください。');
+            await auth.signOut(); // ログアウトさせる
+            return;
+        }
+        
+        const username = userDoc.data().username;
+        
+        alert(`ログイン成功: ${username} さん、ようこそ！`);
+        // ログイン成功後、ゲームセッションに参加
+        joinGameSession(username, roomInput.value);
+
+    } catch (error) {
+        console.error("ログインエラー:", error);
+        alert(`ログインエラー: ${error.message}`);
+    }
+}
+
+// 4. ゲームセッションへの参加ロジック (既存の startGame 呼び出し)
+async function joinGameSession(username, room) {
+    window.username = username;
+    window.room = room; 
+    currentRoom = window.room;
 
     try {
         if (socket.connected) {
@@ -447,5 +559,5 @@ window.loginAndJoin = async function() {
     }
 }
 
-
+// 💡 既存の export を忘れずに
 export { createSakura, startGame };
