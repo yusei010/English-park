@@ -15,22 +15,25 @@
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyDQypYYlRIPBRRTNf_shVcOzl0h5n0OBus",
-    authDomain: "english-park-f65d5.firebaseapp.com",
-    projectId: "english-park-f65d5",
-    storageBucket: "english-park-f65d5.appspot.com",
-    messagingSenderId: "522423703619",
-    appId: "1:522423703619:web:90ff48520d2008fbc89cf6"
+            authDomain: "english-park-f65d5.firebaseapp.com",
+            projectId: "english-park-f65d5",
+            storageBucket: "english-park-f65d5.appspot.com",
+            messagingSenderId: "522423703619",
+            appId: "1:522423703619:web:90ff48520d2008fbc89cf6"
         };
 
         // Firebase を初期化
         firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
+        
+        // ✅ 修正: script.js (モジュール) から参照できるように window に設定する
+        window.auth = firebase.auth();
+        window.db = firebase.firestore();
         
         console.log("Firebase initialized.");
     </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <script type="module" src="three-setup.js"></script>
 
     <style>
@@ -108,7 +111,7 @@
     </div>
     
     <div id="gameArea">
-        </div>
+    </div>
 
     <div id="video-container">
         <div class="video-box" id="local-video-box">
@@ -123,5 +126,5 @@
     <div class="sakura-container"></div>
     
     <script type="module" src="script.js"></script> 
-    </body>
+</body>
 </html>
