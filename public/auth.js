@@ -1,8 +1,10 @@
-// auth.js (LiveKit連携のための修正を反映)
+// public/auth.js (修正後の全体コード)
 
 // 🔥 Firebase初期化
-// LiveKit接続に必要な startGame 関数をインポート
-import { startGame, createSakura } from './script.js'; 
+// LiveKit接続に必要な startGame, joinGameSession 関数をインポート
+// ✅ 修正点: joinGameSession をインポートに追加
+import { startGame, createSakura, joinGameSession } from './script.js'; 
+
 const firebaseConfig = {
     apiKey: "AIzaSyDQypYYlRIPBRRTNf_shVcOzl0h5n0OBus",
     authDomain: "english-park-f65d5.firebaseapp.com",
@@ -20,22 +22,32 @@ const db = firebase.firestore();
 // 認証成功時に更新されるユーザー情報（ローカル変数）
 let username = "";
 let myId = "";
+let room = "EnglishParkRoom"; // 💡 ルーム名を取得するDOMがないため、固定値を設定
 
-// 🌸 共通：ログイン後の演出とゲーム開始
-function enterPark() {
+// ------------------------------------------------------------------
+// 🌸 共通：ログイン後の演出とゲーム開始 (UI遷移のみに機能を絞る)
+// ------------------------------------------------------------------
+
+// 💡 修正点: enterPark のロジックは joinGameSession に統合されるため、ここでは単なるUI切り替えとして残します。
+function enterParkUI(username, myId) {
     document.getElementById("loginScreen").style.display = "none";
     document.getElementById("welcomeScreen").style.display = "block";
     if (typeof createSakura === "function") createSakura();
 
-    // 💡 【重要】LiveKit接続ロジック（script.js）が使用できるよう、
-    // IDと名前をグローバルな window オブジェクトに設定する
+    // 💡 joinGameSessionが window.username/myId を使用するため、ここで設定
     window.myId = myId;
     window.username = username;
+    
+    // 【重要】ルーム名もグローバルに設定（index.htmlで room-input のIDを付けている場合、そちらから取得しても良い）
+    window.room = room; 
 
     setTimeout(() => {
         document.getElementById("welcomeScreen").style.display = "none";
         document.getElementById("gameArea").style.display = "block";
-        startGame(myId); // ✅ IDを渡して広場へ
+        
+        // startGame は joinGameSession の中で呼ばれるため、ここではコメントアウトまたは削除します。
+        // startGame(myId); 
+        
     }, 2000);
 }
 
@@ -46,17 +58,22 @@ document.getElementById("signupButton").addEventListener("click", () => {
     const name = document.getElementById("loginName").value.trim();
     const email = document.getElementById("emailInput").value.trim();
     const password = document.getElementById("passwordInput").value;
+    const roomInput = document.getElementById("room-input"); // ルーム名入力を取得 (index.htmlにある前提)
+    
+    if (roomInput && roomInput.value) {
+        room = roomInput.value;
+    }
 
     if (!name || !email || !password) {
         alert("ユーザー名・メールアドレス・パスワードをすべて入力してください");
         return;
     }
 
-    username = name; // ローカル変数にユーザー名を設定
+    username = name; 
 
     auth.createUserWithEmailAndPassword(email, password)
         .then(userCredential => {
-            myId = userCredential.user.uid; // ローカル変数にUIDを設定
+            myId = userCredential.user.uid; 
             return db.collection("users").doc(myId).set({
                 email,
                 displayName: username,
@@ -65,7 +82,9 @@ document.getElementById("signupButton").addEventListener("click", () => {
             });
         })
         .then(() => {
-            enterPark(); // ✅ 共通処理で広場へ（ここで window に ID/Name が設定される）
+            enterParkUI(username, myId); // UIを切り替える
+            // ✅ 修正点: Socket.IO入室処理へ
+            return joinGameSession(username, room); 
         })
         .catch(error => {
             console.error("登録失敗:", error);
@@ -80,18 +99,25 @@ document.getElementById("loginButton").addEventListener("click", () => {
     const name = document.getElementById("loginName").value.trim();
     const email = document.getElementById("emailInput").value.trim();
     const password = document.getElementById("passwordInput").value;
+    const roomInput = document.getElementById("room-input"); // ルーム名入力を取得
+
+    if (roomInput && roomInput.value) {
+        room = roomInput.value;
+    }
 
     if (!name || !email || !password) {
         alert("ユーザー名・メールアドレス・パスワードをすべて入力してください");
         return;
     }
 
-    username = name; // ローカル変数にユーザー名を設定
+    username = name; 
 
     auth.signInWithEmailAndPassword(email, password)
         .then(userCredential => {
-            myId = userCredential.user.uid; // ローカル変数にUIDを設定
-            enterPark(); // ✅ 共通処理で広場へ（ここで window に ID/Name が設定される）
+            myId = userCredential.user.uid; 
+            enterParkUI(username, myId); // UIを切り替える
+            // ✅ 修正点: Socket.IO入室処理へ
+            return joinGameSession(username, room); 
         })
         .catch(error => {
             console.error("ログイン失敗:", error);

@@ -1,7 +1,7 @@
-// public/script.js (修正後の全体コード - 認証ロジック修正済み)
+// public/script.js (修正後の全体コード - 認証ロジック、Three.js、マルチプレイヤー受信機能追加済み)
 
 // =========================================================
-// 🌐 グローバル変数と初期設定 (変更なし)
+// 🌐 グローバル変数と初期設定
 // =========================================================
 const SERVER_URL = 'https://english-park-2f2y.onrender.com'; // ✅ Renderの公開URL
 const socket = io(SERVER_URL); // WebSocket接続 (シグナリング用)
@@ -23,7 +23,7 @@ const statusDiv = document.getElementById('status');
 const peersInfoDiv = document.getElementById('peers-info');
 
 // =========================================================
-// 🎙️ WebRTC メディアアクセス (変更なし)
+// 🎙️ WebRTC メディアアクセス
 // =========================================================
 
 /**
@@ -67,7 +67,7 @@ function toggleMic() {
 }
 
 // =========================================================
-// 🤝 WebRTC 接続（P2P）処理 (変更なし)
+// 🤝 WebRTC 接続（P2P）処理
 // =========================================================
 
 const iceConfig = {
@@ -124,6 +124,8 @@ function createPeerConnection(remoteId, isCaller) {
         console.log(`Connection state to ${remoteId}: ${peerConnection.connectionState}`);
         updateRemoteVideoStatus(remoteId, peerConnection.connectionState);
     };
+    
+    return peerConnection;
 }
 
 /**
@@ -173,7 +175,7 @@ function updateRemoteVideoStatus(remoteId, state) {
 }
 
 // =========================================================
-// ⚙️ ゲームロジックと位置情報同期 (変更なし)
+// ⚙️ ゲームロジックと位置情報同期
 // =========================================================
 
 // プレイヤーの初期座標と移動速度
@@ -193,16 +195,20 @@ document.addEventListener('keyup', (e) => {
 /**
  * プレイヤー要素を画面に追加します。
  */
-function addPlayer(id, username) {
+function addPlayer(id, username, initialX = playerX, initialY = playerY) {
     const playerEl = document.createElement('div');
     playerEl.className = 'player';
     playerEl.id = `player-${id}`;
     playerEl.textContent = username;
     gameArea.appendChild(playerEl);
+    
+    // 初期の位置を設定
+    playerEl.style.left = `${initialX}px`;
+    playerEl.style.top = `${initialY}px`;
 
     players[id] = {
-        x: playerX, 
-        y: playerY,
+        x: initialX, 
+        y: initialY,
         username: username,
         element: playerEl
     };
@@ -256,7 +262,7 @@ function gameLoop() {
 
 
 // =========================================================
-// 🌸 桜アニメーション (変更なし)
+// 🌸 桜アニメーション
 // =========================================================
 
 function createSakura() {
@@ -279,7 +285,7 @@ setInterval(createSakura, 500);
 
 
 // =========================================================
-// 🚀 開始処理とメインフロー (変更なし)
+// 🚀 開始処理とメインフロー
 // =========================================================
 
 /**
@@ -289,9 +295,11 @@ async function startGame() {
     try {
         // three-setup.js で定義された関数を呼び出す
         if (typeof initThreeScene === 'function') {
+             // 💡 2D版のロジックが残っているため、2Dプレイヤーを削除
+             // Three.jsで3Dモデルを扱う場合は、addPlayer()のDOM操作を中止し、代わりに3Dシーンのプレイヤーを操作する必要があります。
+             console.warn("Three.jsシーンが初期化されました。2Dのプレイヤー描画は無視されます。");
              initThreeScene("gameArea");
         } else {
-             // Three.jsライブラリ自体が読み込まれていない可能性があります
              console.warn("initThreeScene function not found. Did you forget to import/load the Three.js library?");
         }
         
@@ -301,7 +309,8 @@ async function startGame() {
         playerX = Math.floor(Math.random() * (gameArea.clientWidth - 80));
         playerY = Math.floor(Math.random() * (gameArea.clientHeight - 80));
         
-        addPlayer(myId, window.username); 
+        // 自分のプレイヤーを画面に追加
+        addPlayer(myId, window.username, playerX, playerY); 
 
     } catch (e) {
         console.error("ゲーム開始に失敗:", e);
@@ -310,7 +319,7 @@ async function startGame() {
 
 
 // =========================================================
-// 📡 Socket.IO & WebRTC イベントハンドラ (変更なし)
+// 📡 Socket.IO & WebRTC イベントハンドラ (マルチプレイヤー通信のための追加箇所)
 // =========================================================
 
 // 1. 接続成功
@@ -323,7 +332,119 @@ socket.on('connect', () => {
     // ログイン処理が成功した後、joinGameSessionからsocket.emit('join')が呼ばれます
 });
 
-// ... (その他の Socket.IO, WebRTC ロジックは省略) ...
+// 2. 新しいプレイヤーの入室通知 (🚀 **追加**)
+socket.on('new-player', (data) => {
+    const { id, username, initialPlayers } = data;
+    
+    // 既に存在するプレイヤーを処理（ルーム入室時にサーバーからまとめて送られてくる）
+    for (const remoteId in initialPlayers) {
+        if (remoteId !== myId) {
+            if (!players[remoteId]) {
+                // プレイヤーを画面に追加 (初期位置はサーバーからのデータを使用)
+                addPlayer(remoteId, initialPlayers[remoteId].username, initialPlayers[remoteId].x, initialPlayers[remoteId].y);
+            }
+            // 既存プレイヤーに対してWebRTC接続を開始 (自分の方がIDが小さい場合のみ)
+            if (remoteId > myId) {
+                createPeerConnection(remoteId, true); // true: Offerを作成する側
+            }
+        }
+    }
+    
+    // 今入ってきた新しいプレイヤーを処理
+    if (id !== myId && !players[id]) {
+        console.log(`新しいプレイヤーが入室: ${username} (${id})`);
+        addPlayer(id, username); // 初期位置はデフォルト値
+        
+        // 新しいプレイヤーに対してWebRTC接続を開始
+        if (id < myId) {
+            createPeerConnection(id, true); // true: Offerを作成する側
+        }
+    }
+    peersInfoDiv.textContent = `参加者: ${Object.keys(players).length}人`;
+});
+
+// 3. 他のプレイヤーからの位置情報受信 (🚀 **追加**)
+socket.on('player-move', (data) => {
+    const { id, x, y } = data;
+    
+    if (id !== myId && players[id] && players[id].element) {
+        // プレイヤーの位置を更新
+        players[id].x = x;
+        players[id].y = y;
+        players[id].element.style.left = `${x}px`;
+        players[id].element.style.top = `${y}px`;
+    }
+});
+
+// 4. プレイヤーの退出通知 (🚀 **追加**)
+socket.on('player-disconnect', (id) => {
+    console.log(`プレイヤーが退出: ${id}`);
+    
+    // プレイヤー要素をDOMから削除
+    if (players[id] && players[id].element) {
+        players[id].element.remove();
+    }
+    // WebRTC接続を切断
+    if (peerConnections[id]) {
+        peerConnections[id].close();
+        delete peerConnections[id];
+    }
+    // 音声要素を削除
+    const audioEl = document.getElementById(`audio-${id}`);
+    if (audioEl) audioEl.remove();
+    
+    // リモートボックスを削除
+    const remoteBoxEl = document.getElementById(`remote-box-${id}`);
+    if (remoteBoxEl) remoteBoxEl.remove();
+
+    // プレイヤーリストから削除
+    delete players[id];
+
+    peersInfoDiv.textContent = `参加者: ${Object.keys(players).length}人`;
+});
+
+// 5. WebRTCシグナリング受信: Offer (🚀 **追加**)
+socket.on('offer', async (data) => {
+    const { senderId, sdp } = data;
+    console.log('Offer received from:', senderId);
+    
+    if (senderId !== myId) {
+        const peerConnection = createPeerConnection(senderId, false); // Offerを受け取る側
+        
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+        
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        socket.emit('answer', {
+            targetId: senderId,
+            sdp: peerConnection.localDescription
+        });
+    }
+});
+
+// 6. WebRTCシグナリング受信: Answer (🚀 **追加**)
+socket.on('answer', async (data) => {
+    const { senderId, sdp } = data;
+    console.log('Answer received from:', senderId);
+    
+    if (peerConnections[senderId]) {
+        await peerConnections[senderId].setRemoteDescription(new RTCSessionDescription(sdp));
+    }
+});
+
+// 7. WebRTCシグナリング受信: ICE Candidate (🚀 **追加**)
+socket.on('ice-candidate', async (data) => {
+    const { senderId, candidate } = data;
+    
+    if (peerConnections[senderId]) {
+        try {
+            await peerConnections[senderId].addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+            console.error('Error adding received ICE candidate:', e);
+        }
+    }
+});
 
 
 // =========================================================
@@ -408,7 +529,7 @@ window.loginUser = async function() {
     }
 }
 
-// 4. ゲームセッションへの参加ロジック (変更なし)
+// 4. ゲームセッションへの参加ロジック
 async function joinGameSession(username, room) {
     window.username = username;
     window.room = room; 
@@ -416,7 +537,8 @@ async function joinGameSession(username, room) {
 
     try {
         if (socket.connected) {
-             socket.emit('join', { room: currentRoom, username: window.username });
+             // サーバーに入室を通知し、現在ルームにいるプレイヤーの情報を要求する
+             socket.emit('join', { room: currentRoom, username: window.username, x: playerX, y: playerY });
         }
         
         await startGame();
