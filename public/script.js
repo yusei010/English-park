@@ -1,8 +1,4 @@
-// public/script.js (修正後の全体コード - 認証ロジック、Three.js、マルチプレイヤー受信機能追加済み)
-
-// =========================================================
-// 🌐 グローバル変数と初期設定
-// =========================================================
+import { initThreeScene } from './three-setup.js';
 const SERVER_URL = 'https://english-park-2f2y.onrender.com'; // ✅ Renderの公開URL
 const socket = io(SERVER_URL); // WebSocket接続 (シグナリング用)
 
@@ -552,4 +548,4 @@ async function joinGameSession(username, room) {
 }
 
 // Three.js関数が他のファイルにエクスポートできるように宣言
-export { createSakura, startGame };
+export { createSakura, startGame, joinGameSession };

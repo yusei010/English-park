@@ -6,13 +6,17 @@
     <title>English Park (WebRTC)</title>
     <link rel="stylesheet" href="style.css">
     
+    <!-- 1. Socket.IO ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
     
+    <!-- 2. Firebase 互換ライブラリ (auth.js で使用) -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     
     <script>
+        // Firebase設定は auth.js 内で再定義されるため、ここでは省略可能ですが、
+        // 念のため互換ライブラリを初期化しておきます
         const firebaseConfig = {
             apiKey: "AIzaSyDQypYYlRIPBRRTNf_shVcOzl0h5n0OBus",
             authDomain: "english-park-f65d5.firebaseapp.com",
@@ -21,20 +25,13 @@
             messagingSenderId: "522423703619",
             appId: "1:522423703619:web:90ff48520d2008fbc89cf6"
         };
-
-        // Firebase を初期化
         firebase.initializeApp(firebaseConfig);
-        
-        // ✅ 修正: script.js (モジュール) から参照できるように window に設定する
-        window.auth = firebase.auth();
-        window.db = firebase.firestore();
         
         console.log("Firebase initialized.");
     </script>
     
+    <!-- 3. Three.js ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-    <script type="module" src="three-setup.js"></script>
 
     <style>
         /* スタイルはstyle.cssに記述しますが、最低限の表示用CSSを埋め込みます */
@@ -44,7 +41,27 @@
             width: 100vw; 
             height: 100vh; 
             background: #e0ffff; /* 薄い水色の背景 */
+            display: none; /* 初期状態では非表示 */
         }
+        /* ログイン/ウェルカム画面用のコンテナを追加 */
+        #loginScreen, #welcomeScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(to bottom, #fff0f5, #ffffff);
+            z-index: 100;
+        }
+        #welcomeScreen {
+            display: none;
+            font-size: 32px;
+            font-weight: bold;
+        }
+
         .player {
             position: absolute;
             width: 80px;
@@ -74,58 +91,70 @@
             width: 150px; /* 自分のステータス表示用にサイズを調整 */
         }
         #login-form {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
             padding: 30px;
             border: 1px solid #ddd;
             background: #fff;
-            z-index: 100;
             text-align: center;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
 
-    <h1>English Park (WebRTC P2P版)</h1>
+    <!-- ログイン画面コンテナ -->
+    <div id="loginScreen">
+        <div id="login-form">
+            <h2>English Park へようこそ</h2>
+            <p>音声チャットで英会話を学びましょう！</p>
+            
+            <!-- ユーザー名入力欄を統一し、IDを auth.js に合わせる -->
+            <label for="loginName">ユーザー名:</label>
+            <input type="text" id="loginName" placeholder="あなたの名前"><br><br>
+            
+            <label for="emailInput">メールアドレス:</label>
+            <input type="email" id="emailInput" value="test@example.com"><br><br>
+            
+            <label for="passwordInput">パスワード:</label>
+            <input type="password" id="passwordInput" value="password123"><br><br>
+            
+            <label for="room-input">ルーム名:</label>
+            <input type="text" id="room-input" value="EnglishParkRoom"><br><br>
 
-    <div id="login-form">
-        <h2>アカウント認証</h2>
-        
-        <label for="email-input">メールアドレス:</label>
-        <input type="email" id="email-input" value="test@example.com"><br><br>
-        
-        <label for="password-input">パスワード:</label>
-        <input type="password" id="password-input" value="password123"><br><br>
-        
-        <label for="room-input">ルーム名:</label>
-        <input type="text" id="room-input" value="EnglishParkRoom"><br><br>
-
-        <label for="username-input" id="username-label" style="display:none;">ユーザー名:</label>
-        <input type="text" id="username-input" style="display:none;" placeholder="新規ユーザー名"><br><br>
-
-        <button onclick="loginUser()">ログイン</button>
-        <button onclick="showRegisterForm()">新規登録</button>
-        <button id="register-button" onclick="registerUser()" style="display:none;">アカウント作成</button>
+            <!-- onclick属性を削除し、IDを付与 -->
+            <button id="loginButton">ログイン</button>
+            <button id="signupButton">新規登録</button>
+            
+        </div>
     </div>
     
+    <!-- ウェルカム画面コンテナ -->
+    <div id="welcomeScreen">
+        <p>ようこそ、広場へ！</p>
+    </div>
+
+    <!-- ゲームエリア (初期非表示) -->
     <div id="gameArea">
     </div>
 
+    <!-- ビデオ/音声ステータス表示エリア -->
     <div id="video-container">
         <div class="video-box" id="local-video-box">
             <p>🎤 自分の音声接続中</p>
-            </div>
-        
         </div>
+    </div>
 
+    <!-- ステータス表示 -->
     <div id="status" style="position: fixed; top: 10px; right: 10px; z-index: 50; background: #fff; padding: 5px;">ステータス: 未接続</div>
     <div id="peers-info" style="position: fixed; top: 35px; right: 10px; z-index: 50; background: #fff; padding: 5px;">参加者: 1人</div>
     
     <div class="sakura-container"></div>
-    <script type="module" src="three-setup.js"></script>
     
-    <script type="module" src="script.js"></script> 
+    <!-- モジュールとして読み込み -->
+    <script type="module" src="three-setup.js"></script>
+    <script type="module" src="script.js"></script>
+    <!-- 認証ロジックをモジュールとして読み込む -->
+    <script type="module" src="auth.js"></script> 
+
 </body>
 </html>
