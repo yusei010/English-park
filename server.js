@@ -7,10 +7,17 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors'); // クライアントからのCORSを許可
+const path = require('path'); // 🚨【追加】パスモジュールをインポート
 
 const app = express();
 // Renderの公開URLに対応するため、CORSを設定
 app.use(cors()); 
+
+// 🚨【重要：修正】静的ファイルを提供
+// クライアントファイル（index.html, script.js, style.cssなど）が
+// server.jsと同じディレクトリにあると仮定し、ルートディレクトリを静的ファイルとして公開
+app.use(express.static(path.join(__dirname))); 
+
 const server = http.createServer(app);
 
 // ---------------------------------------------------------
@@ -18,11 +25,9 @@ const server = http.createServer(app);
 // ---------------------------------------------------------
 
 // Socket.IOサーバーをHTTPサーバーにアタッチ
-// 許可するオリジンをクライアントのホスト名に設定してください (例: 'http://localhost:8080')
-// Renderでデプロイする場合は、ワイルドカードや具体的なオリジンを設定します。
 const io = new Server(server, {
     cors: {
-        origin: "*", // 開発環境では全てのオリジンを許可 (本番では特定のオリジンを設定すべき)
+        origin: "*", // 開発環境では全てのオリジンを許可 
         methods: ["GET", "POST"]
     }
 });
@@ -69,6 +74,7 @@ io.on('connection', (socket) => {
     // 🚪 ルーム参加/エリア移動 (join)
     // ===================================================
     socket.on('join', (data) => {
+        // 🚨【重要：修正】クライアント側で myId/userId を送るように変更
         const { room: newRoom, username, id: userId, x, y } = data;
         
         const currentUserData = connectedUsers[socket.id];
@@ -85,37 +91,50 @@ io.on('connection', (socket) => {
         
         // 2. 新しいルームに参加
         socket.join(newRoom);
-        connectedUsers[socket.id] = { userId, username, room: newRoom, x, y };
+        // 初期位置をクライアントから受け取るか、サーバー側でデフォルト値を設定（クライアントからの値を優先）
+        const startX = x !== undefined ? x : 50; 
+        const startY = y !== undefined ? y : 50;
+        connectedUsers[socket.id] = { userId, username, room: newRoom, x: startX, y: startY };
 
         console.log(`[JOIN] ${userId} (${username}) joined room ${newRoom}`);
 
         // 3. 新しいルームの他のメンバーに自分の参加を通知
-        socket.to(newRoom).emit('new-player', { id: userId, username, x, y });
+        socket.to(newRoom).emit('new-player', { id: userId, username, x: startX, y: startY });
 
         // 4. 自分に現在のルーム内の全プレイヤー情報を送信
         const playersInRoom = getUsersInRoom(newRoom);
         delete playersInRoom[userId]; // 自分自身はリストから除外
         
-        if (Object.keys(playersInRoom).length > 0) {
-            console.log(`[JOIN] Sending ${Object.keys(playersInRoom).length} existing players to ${userId}`);
-            // 'update-players'イベント名で、既存のプレイヤー情報をクライアントに送信
-            socket.emit('update-players', playersInRoom);
-        }
+        // 🚨【修正】クライアント側のイベントハンドラに合わせてイベント名を変更
+        socket.emit('joined-room', { 
+            id: userId, 
+            username, 
+            room: newRoom, 
+            existingPlayers: Object.entries(playersInRoom).map(([uid, data]) => ({
+                id: uid, 
+                username: data.username, 
+                x: data.x, 
+                y: data.y
+            }))
+        });
     });
 
     // ===================================================
     // 🚶 プレイヤー移動 (move)
     // ===================================================
     socket.on('move', (data) => {
+        // 🚨【修正】クライアントからのデータに id: userId を追加
         const { room, x, y, id: userId } = data;
         
-        if (connectedUsers[socket.id]) {
+        if (connectedUsers[socket.id] && connectedUsers[socket.id].userId === userId) {
             connectedUsers[socket.id].x = x;
             connectedUsers[socket.id].y = y;
             
-            // ルーム内の他のメンバーに自分の新しい位置をブロードキャスト
-            socket.to(room).emit('update-players', {
-                [userId]: { username: connectedUsers[socket.id].username, x, y }
+            // 🚨【修正】クライアント側のイベントハンドラに合わせてイベント名を変更
+            socket.to(room).emit('player-moved', {
+                id: userId,
+                x, 
+                y
             });
         }
     });
@@ -126,14 +145,17 @@ io.on('connection', (socket) => {
 
     // Offerをターゲットに転送
     socket.on('offer', (data) => {
-        const { targetId, sessionDescription, room } = data;
+        // 🚨【修正】クライアントからのフィールド名を 'sdp' に統一
+        const { targetId, sdp, room } = data; 
         // targetId は Firebase UID
         const targetSocket = findSocketIdByUserId(targetId, room);
         
         if (targetSocket) {
             targetSocket.emit('offer', {
                 senderId: connectedUsers[socket.id].userId,
-                sessionDescription
+                // 🚨【修正】クライアント側の処理に合わせてフィールド名を 'sdp' に統一
+                sdp: sdp, 
+                id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
             });
             // console.log(`[WEBRTC] Offer from ${connectedUsers[socket.id]?.userId} to ${targetId} in ${room}`);
         }
@@ -141,13 +163,16 @@ io.on('connection', (socket) => {
 
     // Answerをターゲットに転送
     socket.on('answer', (data) => {
-        const { targetId, sessionDescription, room } = data;
+        // 🚨【修正】クライアントからのフィールド名を 'sdp' に統一
+        const { targetId, sdp, room } = data;
         const targetSocket = findSocketIdByUserId(targetId, room);
 
         if (targetSocket) {
             targetSocket.emit('answer', {
                 senderId: connectedUsers[socket.id].userId,
-                sessionDescription
+                // 🚨【修正】クライアント側の処理に合わせてフィールド名を 'sdp' に統一
+                sdp: sdp,
+                id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
             });
             // console.log(`[WEBRTC] Answer from ${connectedUsers[socket.id]?.userId} to ${targetId} in ${room}`);
         }
@@ -161,7 +186,8 @@ io.on('connection', (socket) => {
         if (targetSocket) {
             targetSocket.emit('ice-candidate', {
                 senderId: connectedUsers[socket.id].userId,
-                candidate
+                candidate,
+                id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
             });
             // console.log(`[WEBRTC] ICE Candidate from ${connectedUsers[socket.id]?.userId} to ${targetId} in ${room}`);
         }
@@ -196,7 +222,8 @@ io.on('connection', (socket) => {
 function findSocketIdByUserId(userId, room) {
     for (const socketId in connectedUsers) {
         const user = connectedUsers[socketId];
-        if (user.userId === userId && user.room === room) {
+        // roomのチェックは厳密には不要だが、念のため維持
+        if (user.userId === userId && user.room === room) { 
             // Socket IDに対応するSocketオブジェクトを取得
             return io.sockets.sockets.get(socketId);
         }
@@ -211,7 +238,4 @@ function findSocketIdByUserId(userId, room) {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
-    // クライアントの SERVER_URL の値がこのサーバーの公開URLと一致しているか確認してください。
-    // クライアント: const SERVER_URL = 'https://english-park-2f2y.onrender.com';
-    // サーバーの公開URLを設定してください。
 });

@@ -7,15 +7,16 @@ const SERVER_URL = 'https://english-park-2f2y.onrender.com'; // ✅ Renderの公
 // Socket.IOは<script>タグでロードされるため、io()が利用可能
 const socket = io(SERVER_URL); // WebSocket接続 (シグナリング用)
 
-let myId; // 自分のSocket ID
+// 🚨【修正】myId は Firebase UID
+let myId; 
 let myUsername;
 let myPlayerElement;
 let currentRoom;
 
-// プレイヤーの状態を格納 (キー: Socket ID, 値: { x, y, username, peerConnection: RTCPeerConnection })
+// プレイヤーの状態を格納 (キー: 相手の Firebase UID, 値: { x, y, username, peerConnection: RTCPeerConnection })
 const players = {}; 
 
-// PeerConnectionsを格納 (キー: 相手のSocket ID, 値: RTCPeerConnectionオブジェクト)
+// PeerConnectionsを格納 (キー: 相手の Firebase UID, 値: RTCPeerConnectionオブジェクト)
 const peerConnections = {}; 
 let localStream; // 自分のローカルメディアストリーム (音声のみ)
 
@@ -66,11 +67,11 @@ async function getLocalMedia() {
 
 /**
  * 新しいRTCPeerConnectionを作成し、ローカルストリームを追加します。
- * @param {string} remoteSocketId - 相手のSocket ID
+ * @param {string} remoteUserId - 相手の Firebase UID
  * @param {boolean} isCaller - trueならオファーを作成する側
  * @returns {RTCPeerConnection}
  */
-function createPeerConnection(remoteSocketId, isCaller) {
+function createPeerConnection(remoteUserId, isCaller) {
     // STUNサーバーの設定
     const pc = new RTCPeerConnection({
         iceServers: [
@@ -82,29 +83,26 @@ function createPeerConnection(remoteSocketId, isCaller) {
     pc.onicecandidate = (event) => {
         if (event.candidate) {
             socket.emit('ice-candidate', {
-                targetId: remoteSocketId,
-                candidate: event.candidate
+                // 🚨【修正】 targetId は相手の Firebase UID
+                targetId: remoteUserId, 
+                candidate: event.candidate,
+                room: currentRoom // ルーム情報を追加
             });
         }
     };
 
     // 2. 相手からのトラック（音声）が追加された時
     pc.ontrack = (event) => {
-        console.log('Remote track received:', event.track.kind, 'from', remoteSocketId);
+        // 🚨【修正】 remoteUserId を使用してオーディオIDを設定
+        console.log('Remote track received:', event.track.kind, 'from', remoteUserId);
         
         // 新しいAudio要素を作成し、ストリームを割り当てる
         const remoteAudio = document.createElement('audio');
         remoteAudio.autoplay = true;
         remoteAudio.controls = false; 
-        remoteAudio.id = `audio-${remoteSocketId}`;
+        remoteAudio.id = `audio-${remoteUserId}`; // 🚨【修正】IDに remoteUserId を使用
         remoteAudio.srcObject = event.streams[0];
         document.body.appendChild(remoteAudio); 
-
-        // プレイヤー要素にオーディオ参照を格納
-        const remotePlayer = players[remoteSocketId]?.element;
-        if (remotePlayer) {
-            remotePlayer.audioElement = remoteAudio;
-        } 
     };
 
     // 3. 自分のローカルストリーム（音声トラック）をPeerConnectionに追加
@@ -115,13 +113,13 @@ function createPeerConnection(remoteSocketId, isCaller) {
     }
 
     // 4. PeerConnectionを格納
-    peerConnections[remoteSocketId] = pc;
+    peerConnections[remoteUserId] = pc;
     // プレイヤーオブジェクトにもPCの参照を格納 (アクセスしやすいように)
-    if (players[remoteSocketId]) {
-        players[remoteSocketId].peerConnection = pc; 
+    // プレイヤーがまだ作成されていない場合もあるため、チェック
+    if (players[remoteUserId]) {
+        players[remoteUserId].peerConnection = pc; 
     } else {
-        // 新しいプレイヤーからの接続の場合、このPCは先に作成される
-        players[remoteSocketId] = { peerConnection: pc }; 
+        players[remoteUserId] = { peerConnection: pc }; 
     }
     
     // 5. オファーを作成する側の場合 (ネゴシエーションが必要な時)
@@ -131,8 +129,10 @@ function createPeerConnection(remoteSocketId, isCaller) {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 socket.emit('offer', {
-                    targetId: remoteSocketId,
-                    sdp: pc.localDescription
+                    // 🚨【修正】 targetId は相手の Firebase UID
+                    targetId: remoteUserId, 
+                    sdp: pc.localDescription, // 🚨【修正】SDPを送信
+                    room: currentRoom // ルーム情報を追加
                 });
             } catch (error) {
                 console.error('Error creating offer:', error);
@@ -140,32 +140,33 @@ function createPeerConnection(remoteSocketId, isCaller) {
         };
     }
     
-    console.log(`PeerConnection created for ${remoteSocketId}. Caller: ${isCaller}`);
+    console.log(`PeerConnection created for ${remoteUserId}. Caller: ${isCaller}`);
     return pc;
 }
 
 /**
  * プレイヤーが退出したときのクリーンアップ処理
- * @param {string} socketId - 退出したプレイヤーのSocket ID
+ * @param {string} userId - 退出したプレイヤーの Firebase UID
  */
-function cleanupPeerConnection(socketId) {
-    const pc = peerConnections[socketId];
+function cleanupPeerConnection(userId) {
+    const pc = peerConnections[userId];
     if (pc) {
         pc.close();
-        delete peerConnections[socketId];
-        console.log(`PeerConnection closed and deleted for ${socketId}`);
+        delete peerConnections[userId];
+        console.log(`PeerConnection closed and deleted for ${userId}`);
     }
 
-    const audioEl = document.getElementById(`audio-${socketId}`);
+    const audioEl = document.getElementById(`audio-${userId}`);
     if (audioEl) {
         audioEl.pause();
         audioEl.remove();
-        console.log(`Remote audio element removed for ${socketId}`);
+        console.log(`Remote audio element removed for ${userId}`);
     }
     
     // プレイヤーリストからも削除
-    if (players[socketId]) {
-        delete players[socketId];
+    if (players[userId]) {
+        // プレイヤー要素の削除は removePlayerElement が行うため、ここでは PC のみクリーンアップ
+        delete players[userId].peerConnection; 
     }
 }
 
@@ -176,14 +177,17 @@ function cleanupPeerConnection(socketId) {
 
 /**
  * プレイヤーのDOM要素を作成し、ゲームエリアに追加
- * @param {string} id - Socket ID
+ * @param {string} id - Firebase UID
  * @param {string} username - ユーザー名
  * @param {boolean} isMe - 自分のプレイヤーかどうか
  */
 function createPlayerElement(id, username, isMe) {
+    // 🚨【修正】プレイヤーが既に存在する場合は何もしない
+    if (players[id] && players[id].element) return players[id].element;
+
     const playerEl = document.createElement('div');
     playerEl.id = `player-${id}`;
-    playerEl.className = `player-avatar ${isMe ? 'me' : 'remote'}`;
+    playerEl.className = `player ${isMe ? 'me' : 'remote'}`; // style.cssに合わせて修正
     // 初期位置は中央付近
     playerEl.style.left = '50%';
     playerEl.style.top = '50%';
@@ -215,7 +219,7 @@ function createPlayerElement(id, username, isMe) {
 
     if (isMe) {
         myPlayerElement = playerEl;
-        myId = id;
+        myId = id; // 🚨【修正】myId に Firebase UID を設定
         myUsername = username;
         // 自分のIDとユーザー名をwindowに保持 (auth.jsからの参照用)
         window.myId = id; 
@@ -228,15 +232,14 @@ function createPlayerElement(id, username, isMe) {
 
 /**
  * プレイヤーを画面から削除
- * @param {string} id - Socket ID
+ * @param {string} id - Firebase UID
  */
 function removePlayerElement(id) {
     const playerEl = document.getElementById(`player-${id}`);
     if (playerEl) {
         playerEl.remove();
     }
-    // cleanupPeerConnectionがplayersオブジェクトから削除するため、ここでは不要
-    // delete players[id]; 
+    delete players[id]; // 🚨【修正】players オブジェクトからも削除
     console.log(`Player ${id} removed.`);
 }
 
@@ -264,9 +267,10 @@ export async function startGame() {
     // auth.jsで設定済みのグローバル変数を使用
     const room = window.room;
     const username = window.username; 
+    const userId = window.myId; // 🚨【修正】Firebase UIDを取得
     
-    if (!room || !username) {
-        console.error("Room or Username not set.");
+    if (!room || !username || !userId) {
+        console.error("Room, Username or UserId not set.");
         return;
     }
     
@@ -276,7 +280,6 @@ export async function startGame() {
     document.getElementById("gameContainer").style.display = "block";
     
     // 1. ローカルメディアストリームを取得
-    // ユーザーがマイクアクセスを拒否した場合、localStream は null になる可能性がある
     localStream = await getLocalMedia(); 
 
     // マイクON/OFFボタンが生成されたら表示
@@ -285,7 +288,8 @@ export async function startGame() {
 
     // 2. サーバーにルーム参加を通知
     if (socket.connected) {
-         socket.emit('join', { room: currentRoom, username: username });
+         // 🚨【修正】 Firebase UID を id として送信
+         socket.emit('join', { room: currentRoom, username: username, id: userId, x: 50, y: 50 });
     } else {
         console.error("Socket not connected. Cannot join room.");
         statusDiv.textContent = 'エラー: サーバーに接続できませんでした。';
@@ -298,7 +302,7 @@ export async function startGame() {
 export function createSakura() {
      // 桜の演出ロジック（ダミー）
      console.log("🌸 Sakura animation started.");
-     // 実際の桜の演出コードをここに追加
+     // three-setup.jsの機能を削除したため、この関数は空のままにしておきます。
 }
 
 
@@ -308,6 +312,7 @@ export function createSakura() {
 
 socket.on('connect', () => {
     statusDiv.textContent = `接続成功: Socket ID = ${socket.id}`;
+    // 🚨【修正】再接続時にゲームセッションを再開するロジックを追加（簡略化のため、ここではスキップ）
 });
 
 socket.on('disconnect', () => {
@@ -318,10 +323,13 @@ socket.on('disconnect', () => {
     });
 });
 
-socket.on('joined', (data) => {
-    myId = data.id;
+// 🚨【修正】サーバーのイベント名 'joined-room' に合わせる
+socket.on('joined-room', (data) => {
+    myId = data.id; // Firebase UID
+    myUsername = data.username;
+    
     // 自分のプレイヤー要素を作成
-    createPlayerElement(myId, data.username, true);
+    createPlayerElement(myId, myUsername, true);
     console.log(`Joined room ${data.room} as ${data.username} (${myId})`);
 
     // 既存のプレイヤーを全て表示し、それぞれとPeerConnectionを確立
@@ -334,7 +342,8 @@ socket.on('joined', (data) => {
     });
 });
 
-socket.on('player-joined', (data) => {
+// 🚨【修正】サーバーのイベント名 'new-player' に合わせる
+socket.on('new-player', (data) => {
     console.log(`New player joined: ${data.username} (${data.id})`);
     
     // プレイヤー要素を作成
@@ -350,27 +359,30 @@ socket.on('player-left', (id) => {
     cleanupPeerConnection(id); // PeerConnectionのクリーンアップ
 });
 
+// 🚨【修正】サーバーのイベント名 'player-moved' に合わせる
 socket.on('player-moved', (data) => {
     updatePlayerPosition(data.id, data.x, data.y);
 });
 
 // WebRTC シグナリングイベント
 socket.on('offer', async (data) => {
-    // PeerConnectionが存在しない場合は新しく作成 (オファーを受け取る側)
+    // 🚨【修正】IDは data.id (Firebase UID)
     const pc = players[data.id]?.peerConnection || createPeerConnection(data.id, false);
 
+    // 既にリモートデスクリプションが設定されている場合はスキップ
     if (pc.remoteDescription && pc.remoteDescription.type === 'offer') {
         console.warn('Received offer when remote description is already set. Skipping.');
         return;
     }
     
     try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); // 🚨【修正】sdp フィールドを使用
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('answer', {
             targetId: data.id,
-            sdp: pc.localDescription
+            sdp: pc.localDescription,
+            room: currentRoom // ルーム情報を追加
         });
     } catch (error) {
         console.error('Error handling offer:', error);
@@ -378,10 +390,10 @@ socket.on('offer', async (data) => {
 });
 
 socket.on('answer', async (data) => {
-    const pc = players[data.id]?.peerConnection;
+    const pc = players[data.id]?.peerConnection; // 🚨【修正】IDは data.id (Firebase UID)
     if (pc && !pc.currentRemoteDescription) {
         try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); // 🚨【修正】sdp フィールドを使用
         } catch (error) {
             console.error('Error handling answer:', error);
         }
@@ -389,11 +401,12 @@ socket.on('answer', async (data) => {
 });
 
 socket.on('ice-candidate', async (data) => {
-    const pc = players[data.id]?.peerConnection;
+    const pc = players[data.id]?.peerConnection; // 🚨【修正】IDは data.id (Firebase UID)
     if (pc && data.candidate) {
         try {
             // ICE候補を追加
-            await pc.addIceCandidate(new RTCIdeCandidate(data.candidate));
+            // RTCIdeCandidate は RTCIceCandidate の間違い
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); 
         } catch (error) {
             // 接続状態によってはICE候補の追加が失敗することがある（無視してOK）
             // console.error('Error adding ICE candidate:', error);
@@ -454,7 +467,8 @@ function gameLoop() {
         // 一定間隔でサーバーに位置を送信
         const now = Date.now();
         if (now - lastMoveTime > MOVE_INTERVAL) {
-            socket.emit('move', { x: newX, y: newY });
+            // 🚨【修正】 Firebase UID と room を move イベントに追加
+            socket.emit('move', { x: newX, y: newY, id: myId, room: currentRoom });
             lastMoveTime = now;
         }
     }
@@ -518,8 +532,6 @@ function handleEnd() {
     stickDirection = { x: 0, y: 0 };
     // ノブを中央に戻す
     stickKnob.style.transform = `translate(0, 0)`; 
-    // translateの基準がノブの中心になるよう、CSSで調整が必要です。
-    // スタイルシートを修正できないため、ノブがベースの中心に戻るよう値をリセットします。
 }
 
 // 初期化時にジョイスティックを設定
