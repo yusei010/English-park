@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>English Park (WebRTC)</title>
-    <!-- Tailwind CSS は使用せず、style.css のカスタムスタイルを使用 -->
+    <!-- Tailwind CSS は使用せず、style.css のカスタムスタイルを使用 (今回は埋め込みCSS) -->
     
     <!-- 1. Socket.IO ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
     
     <!-- 2. Firebase 互換ライブラリ -->
+    <!-- auth.jsで使用するため、先に読み込みます -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
@@ -29,7 +30,7 @@
         }
     </script>
     
-    <!-- 3. Three.js ライブラリ -->
+    <!-- 3. Three.js ライブラリ (グローバルオブジェクトとして使用) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <style>
@@ -161,8 +162,6 @@
             <label for="passwordInput">パスワード:</label>
             <input type="password" id="passwordInput" value="password123"><br><br>
             
-            <!-- ルーム名入力フィールドは動的エリア制に切り替えたため削除 -->
-
             <button id="loginButton">ログイン</button>
             <button id="signupButton">新規登録</button>
             
@@ -194,9 +193,12 @@
     
     <div class="sakura-container"></div>
     
-    <!-- 🌸 モジュールとして読み込み順序に注意 -->
-    <script type="module" src="three-setup.js"></script>
+    <!-- 🌸 【重要】モジュール読み込み順序を修正しました 🌸 -->
+    <!-- 1. three-setup.js (Three.jsのセットアップ) -->
+    <script type="module" src="three-setup.js"></script> 
+    <!-- 2. script.js (joinGameSession, createSakura を export) -->
     <script type="module" src="script.js"></script>
+    <!-- 3. auth.js (joinGameSession, createSakura を import) -->
     <script type="module" src="auth.js"></script> 
 
 </body>

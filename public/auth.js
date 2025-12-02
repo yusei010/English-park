@@ -1,5 +1,4 @@
 // auth.js
-// LiveKit接続に必要な joinGameSession, createSakura 関数をインポート
 import { joinGameSession, createSakura } from './script.js'; 
 
 // 🔥 Firebase初期化
