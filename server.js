@@ -6,17 +6,23 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors'); // クライアントからのCORSを許可
-const path = require('path'); // 🚨【追加】パスモジュールをインポート
+const cors = require('cors'); 
+const path = require('path'); // 【重要】パスモジュールをインポート
 
 const app = express();
 // Renderの公開URLに対応するため、CORSを設定
 app.use(cors()); 
 
-// 🚨【重要：修正】静的ファイルを提供
-// クライアントファイル（index.html, script.js, style.cssなど）が
-// server.jsと同じディレクトリにあると仮定し、ルートディレクトリを静的ファイルとして公開
+// 1. 🚨【修正箇所】静的ファイルを提供
+// server.jsと同じディレクトリにある全てのファイル（index.html, style.css, script.js など）を公開します。
 app.use(express.static(path.join(__dirname))); 
+
+// 2. 🚨【追加箇所】ルート ("/") へのGETリクエストが index.html を返すように明示
+// Render環境でのデプロイ時に index.html が見つからない問題を解消します。
+app.get('/', (req, res) => {
+    // 応答として、同じディレクトリにある index.html を送信
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 const server = http.createServer(app);
 
@@ -74,7 +80,7 @@ io.on('connection', (socket) => {
     // 🚪 ルーム参加/エリア移動 (join)
     // ===================================================
     socket.on('join', (data) => {
-        // 🚨【重要：修正】クライアント側で myId/userId を送るように変更
+        // クライアント側で myId/userId を送るように変更済みの前提
         const { room: newRoom, username, id: userId, x, y } = data;
         
         const currentUserData = connectedUsers[socket.id];
@@ -85,7 +91,7 @@ io.on('connection', (socket) => {
             console.log(`[LEAVE] ${userId} (${username}) leaving room ${oldRoom}`);
             socket.leave(oldRoom);
             
-            // 古いルームの他のメンバーに退出を通知 (クライアント側で WebRTC 切断処理をトリガー)
+            // 古いルームの他のメンバーに退出を通知 (WebRTC 切断処理をトリガー)
             socket.to(oldRoom).emit('player-left', userId);
         }
         
@@ -105,7 +111,7 @@ io.on('connection', (socket) => {
         const playersInRoom = getUsersInRoom(newRoom);
         delete playersInRoom[userId]; // 自分自身はリストから除外
         
-        // 🚨【修正】クライアント側のイベントハンドラに合わせてイベント名を変更
+        // クライアント側のイベントハンドラに合わせてイベント名とデータ形式を調整
         socket.emit('joined-room', { 
             id: userId, 
             username, 
@@ -123,14 +129,14 @@ io.on('connection', (socket) => {
     // 🚶 プレイヤー移動 (move)
     // ===================================================
     socket.on('move', (data) => {
-        // 🚨【修正】クライアントからのデータに id: userId を追加
+        // クライアントからのデータに id: userId を含める
         const { room, x, y, id: userId } = data;
         
         if (connectedUsers[socket.id] && connectedUsers[socket.id].userId === userId) {
             connectedUsers[socket.id].x = x;
             connectedUsers[socket.id].y = y;
             
-            // 🚨【修正】クライアント側のイベントハンドラに合わせてイベント名を変更
+            // クライアント側のイベントハンドラに合わせてイベント名 'player-moved' に合わせる
             socket.to(room).emit('player-moved', {
                 id: userId,
                 x, 
@@ -145,7 +151,7 @@ io.on('connection', (socket) => {
 
     // Offerをターゲットに転送
     socket.on('offer', (data) => {
-        // 🚨【修正】クライアントからのフィールド名を 'sdp' に統一
+        // クライアントからのフィールド名を 'sdp' に統一
         const { targetId, sdp, room } = data; 
         // targetId は Firebase UID
         const targetSocket = findSocketIdByUserId(targetId, room);
@@ -153,28 +159,23 @@ io.on('connection', (socket) => {
         if (targetSocket) {
             targetSocket.emit('offer', {
                 senderId: connectedUsers[socket.id].userId,
-                // 🚨【修正】クライアント側の処理に合わせてフィールド名を 'sdp' に統一
-                sdp: sdp, 
+                sdp: sdp, // クライアント側の処理に合わせてフィールド名を 'sdp' に統一
                 id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
             });
-            // console.log(`[WEBRTC] Offer from ${connectedUsers[socket.id]?.userId} to ${targetId} in ${room}`);
         }
     });
 
     // Answerをターゲットに転送
     socket.on('answer', (data) => {
-        // 🚨【修正】クライアントからのフィールド名を 'sdp' に統一
         const { targetId, sdp, room } = data;
         const targetSocket = findSocketIdByUserId(targetId, room);
 
         if (targetSocket) {
             targetSocket.emit('answer', {
                 senderId: connectedUsers[socket.id].userId,
-                // 🚨【修正】クライアント側の処理に合わせてフィールド名を 'sdp' に統一
                 sdp: sdp,
                 id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
             });
-            // console.log(`[WEBRTC] Answer from ${connectedUsers[socket.id]?.userId} to ${targetId} in ${room}`);
         }
     });
 
@@ -189,7 +190,6 @@ io.on('connection', (socket) => {
                 candidate,
                 id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
             });
-            // console.log(`[WEBRTC] ICE Candidate from ${connectedUsers[socket.id]?.userId} to ${targetId} in ${room}`);
         }
     });
 
