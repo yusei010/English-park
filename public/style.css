@@ -1,83 +1,40 @@
-/* 🌸 基本設定 */
-body {
-  margin: 0;
-  padding: 0;
-  font-family: 'Inter', sans-serif;
-  overflow: hidden; /* スクロール防止 */
-  color: #333;
-}
-
-/* 🎨 ログイン画面 */
+/* 🌸 ログイン画面 */
 #loginScreen {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
+  background: linear-gradient(to bottom, #fff0f5, #ffffff);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  z-index: 100;
-}
-
-#login-form {
-  background: white;
-  padding: 30px;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-  max-width: 400px;
-  width: 90%;
-}
-
-#loginScreen h1 {
-  font-size: 2.5rem;
-  color: #cc3366;
-  margin-bottom: 20px;
-}
-
-#loginScreen h2 {
-  font-size: 1.5rem;
-  color: #333;
-  margin-bottom: 20px;
-  text-align: center;
+  z-index: 5;
 }
 
 #loginScreen input {
-  width: 100%;
   padding: 10px;
   font-size: 16px;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   border: 1px solid #ccc;
-  border-radius: 6px;
-  box-sizing: border-box;
+  border-radius: 4px;
 }
 
 #loginScreen button {
-  width: 48%;
-  padding: 12px;
-  margin: 1%;
-  border-radius: 8px;
-  font-weight: bold;
+  padding: 10px 20px;
+  font-size: 16px;
+  background: #cc3366;
   color: white;
   border: none;
+  border-radius: 6px;
   cursor: pointer;
+  margin: 5px;
   transition: background-color 0.2s;
 }
 
-#loginButton, #registerButton {
-  background-color: #007bff; /* 青 */
-}
-#showRegisterButton {
-  background-color: #28a745; /* 緑 */
-}
-#loginButton:hover, #registerButton:hover, #showRegisterButton:hover {
-  opacity: 0.9;
-}
-#registerButton {
-  width: 100%;
-  margin: 15px 0 0 0;
+#loginScreen button:hover {
+  background: #a3274e;
 }
 
 /* 🌸 Welcome画面 */
@@ -87,108 +44,76 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: #fff0f5; /* 淡いピンク */
+  background: linear-gradient(to bottom, #ffe6f0, #ffffff);
   display: flex;
-  flex-direction: column;
   justify-content: center;
   align-items: center;
-  z-index: 99;
-  color: #cc3366;
   font-size: 32px;
   font-weight: bold;
-  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.7);
+  color: #cc3366;
+  z-index: 5;
 }
 
 #sakuraCanvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 4;
+    pointer-events: none;
 }
 
-/* 🕹️ ゲームエリア (3D) */
+/* ------------------------------------------------------------------ */
+/* 🎮 ゲーム画面 (gameContainer) */
+/* ------------------------------------------------------------------ */
 #gameContainer {
   position: relative;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
+  background-color: #add8e6; 
 }
 
-#gameArea canvas {
-  display: block;
-  /* three-setup.js でサイズが設定されますが、念のため */
-}
-
-/* プレイヤーのアバター表示 (2Dマップ用オーバーレイ) */
-.players-2d-overlay {
+/* 3D描画エリア */
+#gameArea {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* クリックイベントを透過させる */
-  z-index: 5; 
 }
 
-.player-avatar {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  background-color: #ff5722; /* オレンジ */
-  border: 2px solid #e64a19;
-  border-radius: 50%;
+/* 📢 ステータスとボタン */
+#controls {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
   display: flex;
-  justify-content: center;
+  gap: 10px;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  transform: translate(-50%, -50%); /* 中央を基準にする */
-  transition: left 0.05s linear, top 0.05s linear;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.name-tag {
-  position: absolute;
-  top: -20px;
-  font-size: 10px;
+#status {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
   font-weight: bold;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 2px 5px;
-  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   white-space: nowrap;
 }
 
-/* 📱 仮想スティック（スマホ専用） */
-#stickBase {
-position: fixed;
-bottom: 20px;
-left: 20px;
-width: 80px;
-height: 80px;
-background: rgba(200,200,200,0.3);
-border-radius: 50%;
-z-index: 10;
-touch-action: none;
-}
-
-#stickKnob {
-position: absolute;
-width: 40px;
-height: 40px;
-left: 40px;
-top: 40px;
-background: rgba(255,100,100,0.8);
-border-radius: 50%;
-transform: translate(-50%, -50%);
-}
-
-/* 🎤 マイク操作ボタン */
-.control-panel {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 10;
+#peers-info {
+  padding: 8px 16px;
+  background-color: #f0f0f0;
+  border-radius: 6px;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  white-space: nowrap;
 }
 
 #micToggle {
@@ -199,31 +124,83 @@ transform: translate(-50%, -50%);
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+#micToggle:active {
+    transform: scale(0.98);
+}
+
+/* 👤 2Dプレイヤーアバターオーバーレイ */
+#otherPlayers2D {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* クリックイベントを透過させる */
+    z-index: 9;
+}
+
+.player-avatar {
+    position: absolute;
+    /* 3D to 2D 変換で位置が設定される（現在は省略） */
+}
+
+.name-tag {
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    transform: translate(-50%, -150%); /* アバターの上に配置 */
+    opacity: 0.8;
+    transition: background-color 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+
+/* 🗣️ 話している時のハイライト */
+.speaking-highlight .name-tag {
+    background-color: #4CAF50; /* 緑色の強調 */
+    box-shadow: 0 0 10px #4CAF50, 0 0 20px #4CAF50;
+    opacity: 1.0;
+    border: 2px solid white; /* 輪郭を強調 */
 }
 
 
-/* 状態表示 */
-#status {
+/* 📱 仮想スティック（スマホ専用） */
+#stickBase {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 80px;
+  height: 80px;
+  background: rgba(200,200,200,0.3);
+  border-radius: 50%;
+  z-index: 10;
+  touch-action: none;
+}
+
+#stickKnob {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  left: 50%; 
+  top: 50%; 
+  background: rgba(255,100,100,0.8);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* ⚙️ 設定ボタンとパネル */
+#settingsToggle {
   position: fixed;
   top: 10px;
   right: 10px;
   z-index: 20;
-  padding: 8px 12px;
-  background-color: #e0f7fa;
-  color: #00838f;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-#peers-info {
-  position: fixed;
-  top: 50px;
-  right: 10px;
-  z-index: 20;
-  padding: 8px 12px;
-  background-color: #fff8e1;
-  color: #ff6f00;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  font-size: 12px;
+  padding: 10px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  cursor: pointer;
 }

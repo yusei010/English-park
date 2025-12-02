@@ -1,31 +1,35 @@
 // script.js - ゲームロジック、WebRTC通信、3Dアバターの制御
 
-import { initThreeScene, updateCamera, updatePlayerPosition, getMyPlayerMesh } from './three-setup.js';
+import { initThreeScene, updateCamera, updatePlayerPosition, getMyPlayerMesh, removePlayerMesh, setPlayerSpeaking } from './three-setup.js';
 
 // =========================================================
 // 🌐 グローバル変数と初期設定
 // =========================================================
 
 // 🚨 シグナリングサーバーは以前のデプロイURLに戻しました。
-// サーバーがダウンしている場合、WebRTCチャットは機能しませんが、エラーを回避するためにこの構造が必要です。
 const SERVER_URL = 'https://english-park-2f2y.onrender.com';
-const socket = io(SERVER_URL);
+const socket = io(SERVER_URL); 
 
-let myId; // 自分のFirebase UID
+let myId; // 自分のSocket ID (通信用)
 let myUsername;
 let currentRoomName;
 
-// プレイヤーの状態を格納 (キー: Socket ID, 値: { x, y, username, mesh, peerConnections: {} })
+// プレイヤーの状態を格納 (キー: Socket ID, 値: { x, y, z, username, mesh, isSpeaking })
 const players = {}; 
 const peerConnections = {}; 
 let localStream; // 自分のローカルメディアストリーム (音声のみ)
 
-const localPosition = { x: 0, y: 1, z: 0 }; // 自分の位置 (Three.js座標)
-let moveDirection = { x: 0, y: 0 }; // 移動方向 (スティック/キーボード)
-
 const statusDiv = document.getElementById('status');
 const peersInfoDiv = document.getElementById('peers-info');
 const micToggleButton = document.getElementById('micToggle');
+const audioContext = new (window.AudioContext || window.webkitAudioContext)(); // 音声視覚化用
+const analyser = audioContext.createAnalyser();
+
+// 自分の音量監視用
+let localStreamSource;
+
+// 移動制御
+let moveDirection = { x: 0, y: 0 }; 
 
 // ------------------------------------------------------------------
 // 🔑 ゲーム開始エントリポイント
@@ -35,7 +39,7 @@ const micToggleButton = document.getElementById('micToggle');
  * ログイン成功後に呼び出され、ゲームを開始する。
  */
 export async function startGame(uid, username, roomName) {
-    myId = uid;
+    myId = uid; 
     myUsername = username;
     currentRoomName = roomName;
     
@@ -44,14 +48,14 @@ export async function startGame(uid, username, roomName) {
 
     // 2. プレイヤーを初期化
     players[myId] = {
-        x: localPosition.x,
-        y: localPosition.y,
-        z: localPosition.z,
+        x: 0,
+        y: 1,
+        z: 0,
         username: myUsername,
         mesh: getMyPlayerMesh(), // Three.jsから自分のMeshを取得
         isSpeaking: false,
-        peerConnections: {}
     };
+    players[myId].mesh.name = `player-${myId}`; // 3DメッシュにIDを設定
 
     // 3. Socket.IOでの接続とルームへの参加
     setupSocketListeners();
@@ -59,6 +63,7 @@ export async function startGame(uid, username, roomName) {
     
     // 4. ゲームループを開始
     gameLoop(); 
+    checkLocalAudioAnalysisLoop(); // 自分の音量チェックを開始
 
     showStatus(`広場へ接続中... ルーム: ${currentRoomName}`);
     socket.emit('join', { room: currentRoomName, username: myUsername, uid: myId });
@@ -67,7 +72,7 @@ export async function startGame(uid, username, roomName) {
 }
 
 // ------------------------------------------------------------------
-// 🎙️ WebRTC メディアアクセス
+// 🎙️ WebRTC メディアアクセスと音量分析
 // ------------------------------------------------------------------
 
 /**
@@ -75,24 +80,32 @@ export async function startGame(uid, username, roomName) {
  */
 async function getLocalMedia() {
     if (localStream) {
-        showStatus("既にマイクが接続されています。", false);
+        // 既に接続されている場合はマイクをミュート/アンミュート
+        const track = localStream.getAudioTracks()[0];
+        const enabled = !track.enabled;
+        track.enabled = enabled;
+        updateMicButtonState(enabled);
+        setPlayerSpeaking(myId, enabled && players[myId].isSpeaking); // 3Dアバターに状態を反映
+        showStatus(enabled ? "マイクをONにしました。" : "マイクをOFFにしました。", false);
         return;
     }
 
     try {
-        // カメラは不要なため video: false
         localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
         console.log("Local audio stream obtained.");
 
-        micToggleButton.textContent = '🎙️ マイクON';
-        micToggleButton.style.backgroundColor = '#ddffdd';
-        
+        // 音量分析ノードの設定 (自分の声の視覚化用)
+        localStreamSource = audioContext.createMediaStreamSource(localStream);
+        localStreamSource.connect(analyser);
+        // analyser.connect(audioContext.destination); // デバッグ用。通常は不要
+
+        updateMicButtonState(true);
         showStatus("マイク接続成功！他の参加者と通信します。");
         
         // 接続済みの全ピアに対して自分のストリームを追加
-        Object.keys(peerConnections).forEach(peerId => {
+        Object.values(peerConnections).forEach(pc => {
             localStream.getTracks().forEach(track => {
-                peerConnections[peerId].addTrack(track, localStream);
+                pc.addTrack(track, localStream);
             });
         });
 
@@ -104,13 +117,38 @@ async function getLocalMedia() {
     }
 }
 
+/**
+ * マイクボタンのUIを更新します。
+ */
+function updateMicButtonState(isEnabled) {
+    if (isEnabled) {
+        micToggleButton.textContent = '🎙️ マイクON (クリックでミュート)';
+        micToggleButton.style.backgroundColor = '#ddffdd';
+        micToggleButton.style.color = '#00838f';
+    } else {
+        micToggleButton.textContent = '🔇 マイクOFF (クリックでON)';
+        micToggleButton.style.backgroundColor = '#ffdddd';
+        micToggleButton.style.color = '#c62828';
+    }
+}
+
+
 // ------------------------------------------------------------------
 // 🌐 Socket.IOシグナリング
 // ------------------------------------------------------------------
 
 function setupSocketListeners() {
     socket.on('connect', () => {
-        myId = socket.id; // Socket IDを通信用IDとして使用
+        const oldId = myId;
+        myId = socket.id; 
+        
+        // プレイヤーマップのキーをSocket IDに更新
+        if (oldId && players[oldId]) {
+            players[myId] = players[oldId];
+            players[myId].mesh.name = `player-${myId}`; // 3DメッシュのIDも更新
+            delete players[oldId];
+        } 
+        
         showStatus(`シグナリングサーバー接続済み (ID: ${myId})`);
     });
 
@@ -131,6 +169,7 @@ function setupSocketListeners() {
     socket.on('peer_left', (data) => {
         showStatus(`参加者 (${data.peerId}) が退出しました。`);
         closePeerConnection(data.peerId);
+        removePlayerMesh(data.peerId); // Three.jsシーンから削除
     });
 
     socket.on('signal', async (data) => {
@@ -139,10 +178,8 @@ function setupSocketListeners() {
 
         try {
             if (data.sdp) {
-                // SDP (Offer/Answer) を処理
                 await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
                 if (data.sdp.type === 'offer') {
-                    // Offerを受信した場合、Answerを作成して送信
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
                     socket.emit('signal', {
@@ -151,7 +188,6 @@ function setupSocketListeners() {
                     });
                 }
             } else if (data.candidate) {
-                // ICE Candidate を処理
                 await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
             }
         } catch (e) {
@@ -161,10 +197,16 @@ function setupSocketListeners() {
 
     socket.on('position_update', (data) => {
         if (data.id !== myId) {
-            // 他のプレイヤーの3Dアバターを更新
+            // 3Dアバターを更新 (three-setup.jsでメッシュの作成も処理される)
             updatePlayerPosition(data.id, data.x, data.y, data.z);
-            // 2Dアバターの位置も更新（3D座標を2D画面座標に変換する必要があるが、今回は省略）
-            updatePlayerAvatar2D(data.id, data.x, data.z, data.username);
+            
+            // プレイヤーリストのユーザー名を更新 
+            if (players[data.id]) {
+                players[data.id].username = data.username;
+            }
+
+            // 2Dアバターの位置更新（実際には3D to 2D変換が必要なため、ここでは名前タグの更新のみ）
+            updatePlayerAvatar2D(data.id, data.x, data.z, data.username); 
         }
     });
 }
@@ -176,7 +218,6 @@ function setupSocketListeners() {
 function createPeerConnection(peerId, isInitiator) {
     if (peerConnections[peerId]) return;
 
-    // WebRTC設定
     const config = {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' } // Google STUNサーバー
@@ -198,26 +239,29 @@ function createPeerConnection(peerId, isInitiator) {
 
     // リモートトラック（音声）イベント
     pc.ontrack = (event) => {
-        // リモートオーディオトラックをオーディオ要素に追加
         if (event.streams && event.streams[0]) {
             const remoteAudio = document.createElement('audio');
             remoteAudio.autoplay = true;
-            remoteAudio.controls = false; // プレイヤーにはコントロールは不要
+            remoteAudio.controls = false; 
             remoteAudio.srcObject = event.streams[0];
             remoteAudio.id = `audio-${peerId}`;
+            remoteAudio.volume = 1.0; 
             document.getElementById('remote-audio-container').appendChild(remoteAudio);
             showStatus(`音声接続成功: ${peerId}`);
+            
+            // リモート音声の音量分析を設定
+            setupRemoteAudioAnalysis(peerId, event.streams[0]);
         }
     };
     
     // 自分のストリームを追加 (マイクがONの場合のみ)
-    if (localStream) {
+    if (localStream && localStream.getAudioTracks()[0].enabled) {
         localStream.getTracks().forEach(track => {
             pc.addTrack(track, localStream);
         });
     }
 
-    // Initiator (Offerの作成者) の処理
+    // Initiator の処理
     if (isInitiator) {
         pc.onnegotiationneeded = async () => {
             try {
@@ -233,7 +277,7 @@ function createPeerConnection(peerId, isInitiator) {
         };
     }
     
-    // プレイヤーリストに追加 (3Dメッシュ生成は位置情報受信時に行う)
+    // プレイヤーリストに追加
     if (!players[peerId]) {
         players[peerId] = {
             x: 0,
@@ -242,7 +286,6 @@ function createPeerConnection(peerId, isInitiator) {
             username: peerId.substring(0, 8), // 仮のユーザー名
             mesh: null,
             isSpeaking: false,
-            peerConnections: {}
         };
         createPlayerAvatar2D(peerId, players[peerId].username);
     }
@@ -254,8 +297,6 @@ function closePeerConnection(peerId) {
         peerConnections[peerId].close();
         delete peerConnections[peerId];
         
-        // 3Dアバターと2Dアバターを削除
-        // 3D削除ロジックはthree-setup.jsに実装が必要です
         document.getElementById(`player-${peerId}`)?.remove();
         document.getElementById(`audio-${peerId}`)?.remove();
         
@@ -281,6 +322,90 @@ function broadcastPosition() {
     socket.emit('position_update', data);
 }
 
+// ------------------------------------------------------------------
+// 🗣️ 音声視覚化 (Speaking Highlight)
+// ------------------------------------------------------------------
+
+const SPEAKING_THRESHOLD = 15; // 音量のしきい値 (0-255)
+const VISUALIZATION_INTERVAL = 50; // 視覚化チェック間隔 (ms)
+
+/**
+ * リモートオーディオの音量分析を設定します。
+ */
+function setupRemoteAudioAnalysis(id, stream) {
+    const source = audioContext.createMediaStreamSource(stream);
+    const remoteAnalyser = audioContext.createAnalyser();
+    
+    source.connect(remoteAnalyser);
+    // source.connect(audioContext.destination); // リモート音声が聞こえるように再生先に接続
+
+    const bufferLength = remoteAnalyser.fftSize;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    const checkVolume = () => {
+        if (!peerConnections[id]) return; // 接続が切断されていたら終了
+        
+        remoteAnalyser.getByteFrequencyData(dataArray);
+        
+        // 周波数データの平均を計算
+        let sum = 0;
+        for(let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i];
+        }
+        const average = sum / bufferLength;
+
+        const isSpeaking = average > SPEAKING_THRESHOLD;
+        
+        if (players[id] && players[id].isSpeaking !== isSpeaking) {
+            players[id].isSpeaking = isSpeaking;
+            setPlayerSpeaking(id, isSpeaking); // 3Dアバターを更新
+            updatePlayerAvatar2DHighlight(id, isSpeaking); // 2Dハイライトを更新
+        }
+        setTimeout(checkVolume, VISUALIZATION_INTERVAL);
+    };
+    checkVolume();
+}
+
+/**
+ * 自分の音量分析を定期的にチェックします。
+ */
+function checkLocalAudioAnalysis() {
+    if (!localStreamSource || !localStream.getAudioTracks()[0].enabled) {
+        // マイクOFFの場合は話していない状態にする
+        if (players[myId] && players[myId].isSpeaking) {
+            players[myId].isSpeaking = false;
+            setPlayerSpeaking(myId, false);
+            updatePlayerAvatar2DHighlight(myId, false);
+        }
+        return;
+    }
+    
+    const bufferLength = analyser.fftSize;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(dataArray);
+
+    let sum = 0;
+    for(let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+    }
+    const average = sum / bufferLength;
+
+    const isSpeaking = average > SPEAKING_THRESHOLD;
+
+    if (players[myId] && players[myId].isSpeaking !== isSpeaking) {
+        players[myId].isSpeaking = isSpeaking;
+        setPlayerSpeaking(myId, isSpeaking); // 3Dアバターを更新
+        updatePlayerAvatar2DHighlight(myId, isSpeaking); // 2Dハイライトを更新
+    }
+}
+
+/**
+ * 自分の音量チェックを繰り返し実行するループ
+ */
+function checkLocalAudioAnalysisLoop() {
+    setInterval(checkLocalAudioAnalysis, VISUALIZATION_INTERVAL);
+}
+
 
 // ------------------------------------------------------------------
 // 🕹️ ゲームの入力制御
@@ -292,10 +417,15 @@ const MOVE_SPEED = 0.05; // 移動速度 (Three.js座標)
 const POSITION_UPDATE_INTERVAL = 100; // 移動ブロードキャスト間隔
 
 function setupInputControls() {
-    document.addEventListener('keydown', (e) => { keys[e.key] = true; });
-    document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+    document.addEventListener('keydown', (e) => { 
+        // 入力フォームでのキー操作を無視
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+        keys[e.key.toLowerCase()] = true; 
+    });
+    document.addEventListener('keyup', (e) => { 
+        keys[e.key.toLowerCase()] = false; 
+    });
     
-    // 仮想スティックのセットアップ
     setupJoystick();
 }
 
@@ -378,7 +508,6 @@ export function createSakura() {
         requestAnimationFrame(animateSakura);
     }
     
-    // リサイズ対応
     window.addEventListener('resize', () => {
         width = canvas.width = window.innerWidth;
         height = canvas.height = window.innerHeight;
@@ -393,17 +522,17 @@ export function createSakura() {
 
 function gameLoop() {
     requestAnimationFrame(gameLoop);
-
+    
     if (!players[myId] || !players[myId].mesh) return;
 
     let dx = 0;
     let dz = 0;
 
     // キーボード入力
-    if (keys['ArrowUp'] || keys['w']) dz -= MOVE_SPEED;
-    if (keys['ArrowDown'] || keys['s']) dz += MOVE_SPEED;
-    if (keys['ArrowLeft'] || keys['a']) dx -= MOVE_SPEED;
-    if (keys['ArrowRight'] || keys['d']) dx += MOVE_SPEED;
+    if (keys['arrowup'] || keys['w']) dz -= MOVE_SPEED;
+    if (keys['arrowdown'] || keys['s']) dz += MOVE_SPEED;
+    if (keys['arrowleft'] || keys['a']) dx -= MOVE_SPEED;
+    if (keys['arrowright'] || keys['d']) dx += MOVE_SPEED;
 
     // 仮想スティック入力
     if (moveDirection.x !== 0 || moveDirection.y !== 0) {
@@ -414,11 +543,10 @@ function gameLoop() {
     if (dx !== 0 || dz !== 0) {
         const playerMesh = players[myId].mesh;
         
-        // プレイヤーの新しい位置を計算
         let newX = playerMesh.position.x + dx;
         let newZ = playerMesh.position.z + dz;
 
-        // 境界チェック (例: -49から49の範囲)
+        // 境界チェック 
         const boundary = 49;
         newX = Math.max(-boundary, Math.min(boundary, newX));
         newZ = Math.max(-boundary, Math.min(boundary, newZ));
@@ -437,9 +565,6 @@ function gameLoop() {
             lastMoveTime = now;
         }
     }
-
-    // 2Dアバターオーバーレイの更新 (3Dから2Dへの変換は省略)
-    // updatePlayerHighlights();
 }
 
 
@@ -448,17 +573,22 @@ function gameLoop() {
 // ------------------------------------------------------------------
 let stickActive = false;
 let stickBaseRect;
+let stickKnob; 
 
 function setupJoystick() {
     const stickBase = document.getElementById('stickBase');
-    
+    stickKnob = document.getElementById('stickKnob');
+
     // PCの場合はスティックを非表示に
     if (!('ontouchstart' in window) && window.innerWidth > 768) {
         if(stickBase) stickBase.style.display = 'none';
         return;
     }
 
-    const stickKnob = document.getElementById('stickKnob');
+    if (!stickBase || !stickKnob) {
+        console.warn("Joystick elements not found.");
+        return;
+    }
 
     stickBase.addEventListener('pointerdown', handleStart);
     document.addEventListener('pointermove', handleMove);
@@ -467,15 +597,16 @@ function setupJoystick() {
 
 function handleStart(e) {
     e.preventDefault();
-    stickActive = true;
     const stickBase = document.getElementById('stickBase');
+    if (!stickBase) return;
+
+    stickActive = true;
     stickBaseRect = stickBase.getBoundingClientRect();
     stickBase.setPointerCapture(e.pointerId);
 }
 
 function handleMove(e) {
-    if (!stickActive || !stickBaseRect) return;
-    const stickKnob = document.getElementById('stickKnob');
+    if (!stickActive || !stickBaseRect || !stickKnob) return;
 
     const centerX = stickBaseRect.left + stickBaseRect.width / 2;
     const centerY = stickBaseRect.top + stickBaseRect.height / 2;
@@ -499,8 +630,7 @@ function handleMove(e) {
 }
 
 function handleEnd() {
-    if (!stickActive) return;
-    const stickKnob = document.getElementById('stickKnob');
+    if (!stickActive || !stickKnob) return;
     stickActive = false;
     moveDirection = { x: 0, y: 0 };
     stickKnob.style.transform = `translate(0, 0)`; 
@@ -518,7 +648,6 @@ function showStatus(message, isError = false) {
 }
 
 function updatePeersInfo() {
-    // ピア接続数 = peerConnections のキー数
     const peerCount = Object.keys(peerConnections).length; 
     peersInfoDiv.textContent = `接続中のピア数: ${peerCount}人`;
 }
@@ -526,7 +655,7 @@ function updatePeersInfo() {
 function createPlayerAvatar2D(id, username) {
     const playerEl = document.createElement('div');
     playerEl.id = `player-${id}`;
-    playerEl.className = `player-avatar`;
+    playerEl.className = `player-avatar`; 
     
     const nameTag = document.createElement('div');
     nameTag.className = 'name-tag';
@@ -543,14 +672,25 @@ function updatePlayerAvatar2D(id, x3D, z3D, username) {
         return;
     }
     
-    // 3D座標を2D画面座標に変換するロジックは省略
-    // 代わりに、固定の位置に表示するなどで、機能の実装を示す
+    // 3D to 2D 変換は複雑で、Three.jsのProjectionMatrixとViewport情報を利用する必要があります。
+    // そのロジックはここでは省略し、名前タグの更新のみを行います。
 
-    // 実際には以下のような複雑な変換が必要です
-    // const screenPos = project3Dto2D(x3D, z3D); 
-    // playerEl.style.left = `${screenPos.x}px`;
-    // playerEl.style.top = `${screenPos.y}px`;
+    const nameTag = playerEl.querySelector('.name-tag');
+    if (nameTag && nameTag.textContent !== username) {
+        nameTag.textContent = username;
+    }
 }
 
-// ユーザーのアクションによって音声が開始されるように、初期化は行いません
-// function handleActiveSpeakersChanged() { ... }
+/**
+ * 2Dアバターに話している時のハイライトを適用します。
+ */
+function updatePlayerAvatar2DHighlight(id, isSpeaking) {
+    const playerEl = document.getElementById(`player-${id}`);
+    if (playerEl) {
+        if (isSpeaking) {
+            playerEl.classList.add('speaking-highlight');
+        } else {
+            playerEl.classList.remove('speaking-highlight');
+        }
+    }
+}

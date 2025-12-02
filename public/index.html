@@ -6,18 +6,25 @@
     <title>English Park (WebRTC)</title>
     <link rel="stylesheet" href="style.css">
     
+    <!-- Socket.IO ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
     
+    <!-- Firebase 互換ライブラリ (auth.js で使用) -->
+    <!-- v9.6.1 の互換バージョンを使用 -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     
+    <!-- auth.js (認証・ルーム名取得) はESモジュールとしてロード -->
     <script type="module" src="auth.js"></script>
+    <!-- script.js (WebRTC・ゲームロジック) はESモジュールとしてロード -->
+    <!-- three-setup.jsはscript.jsからimportされるため、ここで直接ロードは不要 -->
     <script type="module" src="script.js"></script>
 
 </head>
 <body>
 
+    <!-- 1. ログイン/登録画面 -->
     <div id="loginScreen">
         <h1>English Park - 認証</h1>
         <div id="login-form">
@@ -32,6 +39,7 @@
             <label for="roomInput">ルーム名:</label>
             <input type="text" id="roomInput" value="EnglishParkRoom"><br><br>
 
+            <!-- 🚨【修正箇所】auth.jsが参照するID 'loginName' に合わせる -->
             <label for="loginName" id="registerNameLabel">ユーザー名:</label>
             <input type="text" id="loginName" placeholder="ユーザー名"><br><br>
 
@@ -40,14 +48,18 @@
             </div>
     </div>
 
+    <!-- 2. Welcome画面 (ゲーム開始前に一瞬表示されることを想定) -->
     <div id="welcomeScreen" style="display:none;">
         <p>パークへようこそ！</p>
     </div>
 
+    <!-- 3. ゲーム本体のコンテナ -->
     <div id="gameContainer" style="display:none;">
+        <!-- THREE.js のキャンバスが挿入されるエリア -->
         <div id="gameArea">
-            </div>
+        </div>
 
+        <!-- 仮想ジョイスティック -->
         <div id="stickBase" style="display:block;">
             <div id="stickKnob"></div>
         </div>
@@ -55,5 +67,5 @@
     
     <div id="status">サーバー接続中...</div>
     
-    </body>
+</body>
 </html>
