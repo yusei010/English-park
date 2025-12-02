@@ -1,241 +1,123 @@
-// =========================================================
-// Node.js WebRTC シグナリングサーバー (server.js)
-// =========================================================
+// server.js - Node.js/Express/Socket.IO WebRTC Signaling Server
 
-// 必要なモジュールをインポート
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors'); 
-const path = require('path'); // 【重要】パスモジュールをインポート
+
+// ---------------------------------------------------------
+// 🌐 サーバー設定
+// ---------------------------------------------------------
 
 const app = express();
-// Renderの公開URLに対応するため、CORSを設定
-app.use(cors()); 
-
-// 1. 🚨【修正箇所】静的ファイルを提供
-// server.jsと同じディレクトリにある全てのファイル（index.html, style.css, script.js など）を公開します。
-app.use(express.static(path.join(__dirname))); 
-
-// 2. 🚨【追加箇所】ルート ("/") へのGETリクエストが index.html を返すように明示
-// Render環境でのデプロイ時に index.html が見つからない問題を解消します。
-app.get('/', (req, res) => {
-    // 応答として、同じディレクトリにある index.html を送信
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
 const server = http.createServer(app);
-
-// ---------------------------------------------------------
-// 🌐 Socket.IOサーバーの設定
-// ---------------------------------------------------------
-
-// Socket.IOサーバーをHTTPサーバーにアタッチ
+// ⚠️ クライアントからの接続を許可するため CORS を設定
 const io = new Server(server, {
     cors: {
-        origin: "*", // 開発環境では全てのオリジンを許可 
+        origin: "*", // すべてのオリジンからの接続を許可（本番環境では制限推奨）
         methods: ["GET", "POST"]
     }
 });
 
-// ---------------------------------------------------------
-// 🎮 ユーザーとルーム情報の管理
-// ---------------------------------------------------------
-
-// すべての接続中のユーザーを追跡するマップ
-// キー: Socket ID, 値: { userId: string (Firebase UID), username: string, room: string (Area Key), x: number, y: number }
-const connectedUsers = {}; 
-
-/**
- * 指定されたルーム内のプレイヤーの情報を返します。
- * @param {string} roomKey 
- * @returns {Object} ユーザーIDをキーとするプレイヤーデータのオブジェクト
- */
-function getUsersInRoom(roomKey) {
-    const roomPlayers = {};
-    for (const socketId in connectedUsers) {
-        const user = connectedUsers[socketId];
-        // ユーザーがそのルームにいて、ルーム情報が設定されていることを確認
-        if (user.room === roomKey) {
-            // クライアントに送る情報 (Socket IDではなく、Firebase UIDをキーとして使用)
-            roomPlayers[user.userId] = { 
-                username: user.username,
-                x: user.x, 
-                y: user.y 
-            };
-        }
-    }
-    return roomPlayers;
-}
-
+// Render 環境では process.env.PORT を使用
+const PORT = process.env.PORT || 3000;
 
 // ---------------------------------------------------------
-// 💻 Socket.IO イベントハンドラ
+// 🤝 Express ルート定義 (404対策とヘルスチェック)
 // ---------------------------------------------------------
+
+// サーバーが正常に稼働していることを示すルート
+app.get('/', (req, res) => {
+    res.send({ status: 'English Park Signaling Server is running.', port: PORT });
+});
+
+// ---------------------------------------------------------
+// 📡 Socket.IO シグナリングロジック
+// ---------------------------------------------------------
+
+const rooms = {}; // ルームの状態管理 (キー: roomName, 値: { socketId: { userId, username } })
 
 io.on('connection', (socket) => {
-    console.log(`[CONNECT] New client connected: ${socket.id}`);
+    console.log(`[Connect] New client connected: ${socket.id}`);
 
-    // ===================================================
-    // 🚪 ルーム参加/エリア移動 (join)
-    // ===================================================
+    // --- 1. ルーム参加 ---
     socket.on('join', (data) => {
-        // クライアント側で myId/userId を送るように変更済みの前提
-        const { room: newRoom, username, id: userId, x, y } = data;
-        
-        const currentUserData = connectedUsers[socket.id];
-        const oldRoom = currentUserData ? currentUserData.room : null;
+        const { room, username, uid } = data;
+        const roomName = room || 'default_room';
 
-        // 1. 古いルームから退出
-        if (oldRoom && oldRoom !== newRoom) {
-            console.log(`[LEAVE] ${userId} (${username}) leaving room ${oldRoom}`);
-            socket.leave(oldRoom);
-            
-            // 古いルームの他のメンバーに退出を通知 (WebRTC 切断処理をトリガー)
-            socket.to(oldRoom).emit('player-left', userId);
+        // ルームに参加
+        socket.join(roomName);
+
+        // ルームの状態を更新
+        if (!rooms[roomName]) {
+            rooms[roomName] = {};
         }
-        
-        // 2. 新しいルームに参加
-        socket.join(newRoom);
-        // 初期位置をクライアントから受け取るか、サーバー側でデフォルト値を設定（クライアントからの値を優先）
-        const startX = x !== undefined ? x : 50; 
-        const startY = y !== undefined ? y : 50;
-        connectedUsers[socket.id] = { userId, username, room: newRoom, x: startX, y: startY };
+        rooms[roomName][socket.id] = { username, uid, socketId: socket.id };
 
-        console.log(`[JOIN] ${userId} (${username}) joined room ${newRoom}`);
+        console.log(`[Join] ${username} (${socket.id}) joined room: ${roomName}`);
 
-        // 3. 新しいルームの他のメンバーに自分の参加を通知
-        socket.to(newRoom).emit('new-player', { id: userId, username, x: startX, y: startY });
+        // 参加者リストを作成 (自分自身を除く)
+        const peersInRoom = Object.keys(rooms[roomName]).filter(id => id !== socket.id);
 
-        // 4. 自分に現在のルーム内の全プレイヤー情報を送信
-        const playersInRoom = getUsersInRoom(newRoom);
-        delete playersInRoom[userId]; // 自分自身はリストから除外
-        
-        // クライアント側のイベントハンドラに合わせてイベント名とデータ形式を調整
-        socket.emit('joined-room', { 
-            id: userId, 
-            username, 
-            room: newRoom, 
-            existingPlayers: Object.entries(playersInRoom).map(([uid, data]) => ({
-                id: uid, 
-                username: data.username, 
-                x: data.x, 
-                y: data.y
-            }))
+        // 自分に対して、既存の参加者リストを送信
+        socket.emit('welcome', { peers: peersInRoom, room: roomName });
+
+        // 他の参加者に対して、新しい参加者が来たことを通知
+        socket.to(roomName).emit('peer_joined', { peerId: socket.id, username, uid });
+    });
+
+    // --- 2. WebRTC シグナリングデータの転送 ---
+    socket.on('signal', (data) => {
+        // data.peerId (転送先の Socket ID) にデータを送信
+        // SDP (Offer/Answer) や ICE Candidate を含む
+        io.to(data.peerId).emit('signal', {
+            peerId: socket.id, // 送信元は自分
+            sdp: data.sdp,
+            candidate: data.candidate
         });
+        // console.log(`[Signal] from ${socket.id} to ${data.peerId} type: ${data.sdp ? data.sdp.type : 'candidate'}`);
     });
 
-    // ===================================================
-    // 🚶 プレイヤー移動 (move)
-    // ===================================================
-    socket.on('move', (data) => {
-        // クライアントからのデータに id: userId を含める
-        const { room, x, y, id: userId } = data;
-        
-        if (connectedUsers[socket.id] && connectedUsers[socket.id].userId === userId) {
-            connectedUsers[socket.id].x = x;
-            connectedUsers[socket.id].y = y;
-            
-            // クライアント側のイベントハンドラに合わせてイベント名 'player-moved' に合わせる
-            socket.to(room).emit('player-moved', {
-                id: userId,
-                x, 
-                y
-            });
-        }
-    });
-    
-    // ===================================================
-    // 🗣️ WebRTC シグナリング (offer, answer, ice-candidate)
-    // ===================================================
-
-    // Offerをターゲットに転送
-    socket.on('offer', (data) => {
-        // クライアントからのフィールド名を 'sdp' に統一
-        const { targetId, sdp, room } = data; 
-        // targetId は Firebase UID
-        const targetSocket = findSocketIdByUserId(targetId, room);
-        
-        if (targetSocket) {
-            targetSocket.emit('offer', {
-                senderId: connectedUsers[socket.id].userId,
-                sdp: sdp, // クライアント側の処理に合わせてフィールド名を 'sdp' に統一
-                id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
-            });
+    // --- 3. 位置情報アップデートのブロードキャスト ---
+    socket.on('position_update', (data) => {
+        const roomName = Array.from(socket.rooms).find(r => r !== socket.id);
+        if (roomName) {
+            // 自分以外にブロードキャスト
+            socket.to(roomName).emit('position_update', data);
         }
     });
 
-    // Answerをターゲットに転送
-    socket.on('answer', (data) => {
-        const { targetId, sdp, room } = data;
-        const targetSocket = findSocketIdByUserId(targetId, room);
-
-        if (targetSocket) {
-            targetSocket.emit('answer', {
-                senderId: connectedUsers[socket.id].userId,
-                sdp: sdp,
-                id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
-            });
-        }
-    });
-
-    // ICE Candidateをターゲットに転送
-    socket.on('ice-candidate', (data) => {
-        const { targetId, candidate, room } = data;
-        const targetSocket = findSocketIdByUserId(targetId, room);
-
-        if (targetSocket) {
-            targetSocket.emit('ice-candidate', {
-                senderId: connectedUsers[socket.id].userId,
-                candidate,
-                id: connectedUsers[socket.id].userId // 送信者IDを id フィールドに追加
-            });
-        }
-    });
-
-    // ===================================================
-    // 🔌 切断 (disconnect)
-    // ===================================================
+    // --- 4. 切断 ---
     socket.on('disconnect', () => {
-        const userData = connectedUsers[socket.id];
+        console.log(`[Disconnect] Client disconnected: ${socket.id}`);
         
-        if (userData) {
-            console.log(`[DISCONNECT] ${userData.userId} (${userData.username}) disconnected from room ${userData.room}`);
-            
-            // ルーム内の他のメンバーに退出を通知
-            socket.to(userData.room).emit('player-left', userData.userId);
+        // 所属していたルームを特定し、他の参加者に通知
+        let leftRoomName;
+        for (const roomName in rooms) {
+            if (rooms[roomName][socket.id]) {
+                leftRoomName = roomName;
+                delete rooms[roomName][socket.id];
+                
+                // ルームに誰もいなくなったら削除
+                if (Object.keys(rooms[roomName]).length === 0) {
+                    delete rooms[roomName];
+                }
+                break;
+            }
+        }
 
-            // ユーザーリストから削除
-            delete connectedUsers[socket.id];
-        } else {
-            console.log(`[DISCONNECT] Client disconnected: ${socket.id}`);
+        if (leftRoomName) {
+            // 同じルームの全ピアに退出を通知
+            socket.to(leftRoomName).emit('peer_left', { peerId: socket.id });
+            console.log(`[Leave] ${socket.id} left room: ${leftRoomName}`);
         }
     });
 });
 
-/**
- * Firebase UIDと現在のルームに基づいて、対応するSocketオブジェクトを見つけます。
- * @param {string} userId - Firebase UID
- * @param {string} room - 現在のルームキー
- * @returns {Socket|null} - 対応するSocketオブジェクト
- */
-function findSocketIdByUserId(userId, room) {
-    for (const socketId in connectedUsers) {
-        const user = connectedUsers[socketId];
-        // roomのチェックは厳密には不要だが、念のため維持
-        if (user.userId === userId && user.room === room) { 
-            // Socket IDに対応するSocketオブジェクトを取得
-            return io.sockets.sockets.get(socketId);
-        }
-    }
-    return null;
-}
-
 // ---------------------------------------------------------
-// 👂 サーバーリスニング開始
+// 🚀 サーバー起動
 // ---------------------------------------------------------
 
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`✅ Signaling Server running on port ${PORT}`);
+    console.log(`✅ Access http://localhost:${PORT} for health check.`);
 });
