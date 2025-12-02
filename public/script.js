@@ -276,7 +276,8 @@ export async function startGame() {
     document.getElementById("gameContainer").style.display = "block";
     
     // 1. ローカルメディアストリームを取得
-    await getLocalMedia(); 
+    // ユーザーがマイクアクセスを拒否した場合、localStream は null になる可能性がある
+    localStream = await getLocalMedia(); 
 
     // マイクON/OFFボタンが生成されたら表示
     const micToggle = document.getElementById("micToggle");
@@ -392,7 +393,7 @@ socket.on('ice-candidate', async (data) => {
     if (pc && data.candidate) {
         try {
             // ICE候補を追加
-            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            await pc.addIceCandidate(new RTCIdeCandidate(data.candidate));
         } catch (error) {
             // 接続状態によってはICE候補の追加が失敗することがある（無視してOK）
             // console.error('Error adding ICE candidate:', error);

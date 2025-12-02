@@ -4,202 +4,72 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>English Park (WebRTC)</title>
-    <!-- Tailwind CSS は使用せず、style.css のカスタムスタイルを使用 (今回は埋め込みCSS) -->
+    <link rel="stylesheet" href="style.css">
     
-    <!-- 1. Socket.IO ライブラリ -->
+    <!-- Socket.IO ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
     
-    <!-- 2. Firebase 互換ライブラリ -->
-    <!-- auth.jsで使用するため、先に読み込みます -->
+    <!-- Firebase 互換ライブラリ (auth.js で使用) -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     
-    <script>
-        // Firebase設定をHTML側で初期化
-        const firebaseConfig = {
-            apiKey: "AIzaSyDQypYYR1PBRRTNf_shVcOzl0h5n0OBus", // Dummy Key
-            authDomain: "english-park-f65d5.firebaseapp.com",
-            projectId: "english-park-f65d5",
-            storageBucket: "english-park-f65d5.appspot.com",
-            messagingSenderId: "522423703619",
-            appId: "1:522423703619:web:90ff48520d2008fbc89cf6"
-        };
-        if (typeof firebase !== 'undefined' && typeof firebase.initializeApp === 'function') {
-             firebase.initializeApp(firebaseConfig);
-        }
-    </script>
-    
-    <!-- 3. Three.js ライブラリ (グローバルオブジェクトとして使用) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- auth.js (認証・ルーム名取得) はESモジュールとしてロード -->
+    <script type="module" src="auth.js"></script>
+    <!-- script.js (WebRTC・ゲームロジック) はESモジュールとしてロード -->
+    <script type="module" src="script.js"></script>
 
-    <style>
-        /* スタイルはstyle.cssに記述されますが、最低限の表示用CSSを埋め込みます */
-        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; }
-        #gameArea { 
-            position: relative; 
-            width: 100vw; 
-            height: 100vh; 
-            background: #e0ffff; /* 薄い水色の背景 */
-            display: none; 
-        }
-        #loginScreen, #welcomeScreen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: linear-gradient(to bottom, #fff0f5, #ffffff);
-            z-index: 100;
-        }
-        #welcomeScreen {
-            display: none;
-            font-size: 32px;
-            font-weight: bold;
-        }
-
-        .player {
-            position: absolute;
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: #ff69b4; 
-            border: 3px solid #fff;
-            color: #fff;
-            text-align: center;
-            line-height: 80px;
-            font-weight: bold;
-            transition: all 0.1s linear; 
-        }
-        #video-container {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            display: flex;
-            gap: 10px;
-            z-index: 50;
-            flex-wrap: wrap; 
-            max-width: 90vw;
-        }
-        .video-box {
-            border: 1px solid #ccc;
-            padding: 10px;
-            text-align: center;
-            background: rgba(255, 255, 255, 0.8);
-            width: 150px; 
-            min-width: 120px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .toggle-button {
-            padding: 5px 10px;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        #login-form {
-            padding: 30px;
-            border: 1px solid #ddd;
-            background: #fff;
-            text-align: center;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        /* リモートプレイヤーの音声UIを小さくする */
-        .remote-audio-box audio {
-            width: 100%;
-            display: none; /* <audio>タグ自体は非表示 */
-        }
-        
-        /* 画面中央にエリアの境界線が見えるようにする (デバッグ用) */
-        #gameArea::before, #gameArea::after {
-            content: '';
-            position: absolute;
-            background: rgba(0, 0, 0, 0.2);
-            /* AREA_SIZE = 500 に対応 */
-            opacity: 0.5;
-            z-index: 0;
-            pointer-events: none; /* クリックを邪魔しないように */
-        }
-        /* 縦線 */
-        #gameArea::before {
-            left: 500px; 
-            top: 0;
-            width: 2px;
-            height: 100%;
-        }
-        /* 横線 */
-        #gameArea::after {
-            top: 500px; 
-            left: 0;
-            height: 2px;
-            width: 100%;
-        }
-    </style>
 </head>
 <body>
 
-    <!-- ログイン画面コンテナ -->
+    <!-- 1. ログイン/登録画面 -->
     <div id="loginScreen">
+        <h1>English Park - 認証</h1>
         <div id="login-form">
-            <h2>English Park へようこそ</h2>
-            <p>エリア制に切り替えました。近づくと声が聞こえます。ルーム名は不要です。</p>
+            <h2>アカウント認証</h2>
             
-            <label for="loginName">ユーザー名:</label>
-            <input type="text" id="loginName" placeholder="あなたの名前" value="てすと"><br><br>
-            
+            <!-- IDを auth.js が参照する形に修正 -->
             <label for="emailInput">メールアドレス:</label>
             <input type="email" id="emailInput" value="test@example.com"><br><br>
             
             <label for="passwordInput">パスワード:</label>
             <input type="password" id="passwordInput" value="password123"><br><br>
             
+            <label for="roomInput">ルーム名:</label>
+            <input type="text" id="roomInput" value="EnglishParkRoom"><br><br>
+
+            <!-- ユーザー名入力欄 (初期は新規登録時のみ表示) -->
+            <label for="registerName" id="registerNameLabel" style="display:none;">ユーザー名:</label>
+            <input type="text" id="registerName" style="display:none;" placeholder="新規ユーザー名"><br><br>
+
+            <!-- 💡 onclick は auth.js のイベントリスナーに置き換えられたため、IDのみを使用 -->
             <button id="loginButton">ログイン</button>
-            <button id="signupButton">新規登録</button>
-            
+            <button id="showRegisterButton">新規登録</button>
+            <button id="registerButton" style="display:none;">アカウント作成</button>
+        </div>
+    </div>
+
+    <!-- 2. Welcome画面 (現在は認証後にスキップされる可能性あり) -->
+    <div id="welcomeScreen" style="display:none;">
+        <p>パークへようこそ！</p>
+    </div>
+
+    <!-- 3. ゲーム本体のコンテナ -->
+    <div id="gameContainer" style="display:none;">
+        <div id="gameArea">
+            <!-- プレイヤーアバターはここに動的に追加されます -->
+        </div>
+
+        <!-- 仮想スティック (モバイル用) -->
+        <div id="stickBase" style="display:block;">
+            <div id="stickKnob"></div>
         </div>
     </div>
     
-    <!-- ウェルカム画面コンテナ -->
-    <div id="welcomeScreen">
-        <p>ようこそ、広場へ！</p>
-    </div>
-
-    <!-- ゲームエリア (初期非表示) -->
-    <div id="gameArea">
-    </div>
-
-    <!-- ビデオ/音声ステータス表示エリア -->
-    <div id="video-container">
-        <!-- 自分の音声ステータスボックス (ID: local-video-box) -->
-        <div class="video-box" id="local-video-box">
-            <p>🎤 自分の音声</p>
-            <!-- マイクボタンと<audio>要素はscript.jsで動的に追加されます -->
-        </div>
-        <!-- 他のプレイヤーの音声ボックス (ID: remote-box-<peerId>) は script.js で動的に追加されます -->
-    </div>
-
-    <!-- ステータス表示 -->
-    <div id="status" style="position: fixed; top: 10px; right: 10px; z-index: 50; background: #fff; padding: 5px; border-radius: 4px; border: 1px solid #ccc;">ステータス: 未接続</div>
-    <div id="peers-info" style="position: fixed; top: 40px; right: 10px; z-index: 50; background: #fff; padding: 5px; border-radius: 4px; border: 1px solid #ccc;">エリア参加者: 0人</div>
+    <!-- 状態表示とエラーメッセージ -->
+    <div id="status">サーバー接続中...</div>
     
-    <div class="sakura-container"></div>
-    
-    <!-- 🌸 【重要】モジュール読み込み順序を修正しました 🌸 -->
-    <!-- 1. three-setup.js (Three.jsのセットアップ) -->
-    <script type="module" src="three-setup.js"></script> 
-    <!-- 2. script.js (joinGameSession, createSakura を export) -->
-    <script type="module" src="script.js"></script>
-    <!-- 3. auth.js (joinGameSession, createSakura を import) -->
-    <script type="module" src="auth.js"></script> 
+    <!-- 💡 マイクボタンは script.js で動的に追加されます -->
 
 </body>
 </html>
