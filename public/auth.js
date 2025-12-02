@@ -1,6 +1,8 @@
 // auth.js
-// 🚨【修正】importを startGame に変更 (script.jsの正しいエントリポイント)
-import { startGame, createSakura } from './script.js'; 
+// script.js は joinGameSession のために必要
+import { joinGameSession } from './script.js'; 
+// three-setup.js は 3D シーン初期化のために必要
+import { initThreeScene, createSakura } from './three-setup.js'; 
 
 // 🔥 Firebase初期化
 // NOTE: firebaseConfigはindex.html側でも定義されているため、ここではモジュール間の連携を重視
@@ -32,35 +34,52 @@ let myId = "";
  * @param {string} roomName ルーム名
  */
 function enterPark(userId, displayName, roomName) {
-    document.getElementById("loginScreen").style.display = "none";
-    document.getElementById("welcomeScreen").style.display = "block";
+    myId = userId;
+    username = displayName;
+
+    console.log(`[AUTH] 認証成功: UID=${myId}, Name=${username}, Room=${roomName}`);
+
+    // 画面切り替え
+    document.getElementById("loginScreen").style.display = 'none';
+    document.getElementById("gameContainer").style.display = 'block';
+
+    // 🌸 3Dシーンの初期化
+    // initThreeSceneがthree-setup.jsからインポートされていることを確認
+    initThreeScene('gameArea'); 
     
-    // ユーザー情報をグローバルに設定 (script.jsで参照される)
-    window.username = displayName;
-    window.room = roomName;
-    window.myId = userId; 
-
-    if (typeof createSakura === "function") createSakura();
-
-    // 💡 【重要】ゲーム開始
-    // 🚨【修正】呼び出す関数を joinGameSession から startGame に変更
-    // script.js側のエクスポート関数に合わせる
-    startGame(); 
+    // ゲームセッションに参加 (WebSocket/WebRTC)
+    joinGameSession(myId, username, roomName);
+    
+    // 桜アニメーションの演出をスタート（パーティクル）
+    createSakura();
 }
+
 
 // ------------------------------------------------------------------
 
-// ✅ 新規登録処理
-document.getElementById("signupButton").addEventListener("click", () => {
-    // 🚨【修正】HTMLのIDに合わせて input 要素を取得
-    const name = document.getElementById("loginName").value.trim(); 
+// 📝 新規登録UI切り替え
+document.getElementById("showRegisterButton").addEventListener("click", () => {
+    document.getElementById("loginButton").style.display = 'none';
+    document.getElementById("showRegisterButton").style.display = 'none';
+    document.getElementById("registerButton").style.display = 'inline-block';
+    
+    // ユーザー名入力欄を表示
+    document.getElementById("registerNameLabel").style.display = 'inline';
+    document.getElementById("registerName").style.display = 'inline-block';
+});
+
+
+// ------------------------------------------------------------------
+
+// ✍️ 新規登録処理
+document.getElementById("registerButton").addEventListener("click", () => {
+    const name = document.getElementById("registerName").value.trim();
     const email = document.getElementById("emailInput").value.trim();
     const password = document.getElementById("passwordInput").value;
-    // 🚨【修正】HTMLのIDに合わせて input 要素を取得
     const room = document.getElementById("roomInput").value.trim() || 'default-room';
 
-
     if (!name || !email || !password || !room) {
+        // NOTE: alert() は custom modal UI に置き換えるべきですが、ここでは簡略化
         alert("ユーザー名・メールアドレス・パスワード・ルーム名をすべて入力してください");
         return;
     }
@@ -68,11 +87,11 @@ document.getElementById("signupButton").addEventListener("click", () => {
     auth.createUserWithEmailAndPassword(email, password)
         .then(userCredential => {
             const uid = userCredential.user.uid;
-            
-            // Firestoreにユーザー名とその他情報を保存
+
+            // Firestoreにユーザー情報を保存
             return db.collection("users").doc(uid).set({
-                email,
                 displayName: name,
+                email: email,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 status: "online"
             }).then(() => {
@@ -90,15 +109,13 @@ document.getElementById("signupButton").addEventListener("click", () => {
 
 // ✅ ログイン処理
 document.getElementById("loginButton").addEventListener("click", () => {
-    // 🚨【修正】HTMLのIDに合わせて input 要素を取得
-    const name = document.getElementById("loginName").value.trim(); 
+    // ログイン時はユーザー名入力は必須ではないが、Firestoreに名前を保存していない場合に備えて 'Guest' を使う
     const email = document.getElementById("emailInput").value.trim();
     const password = document.getElementById("passwordInput").value;
-    // 🚨【修正】HTMLのIDに合わせて input 要素を取得
     const room = document.getElementById("roomInput").value.trim() || 'default-room';
 
-    if (!name || !email || !password || !room) {
-        alert("ユーザー名・メールアドレス・パスワード・ルーム名をすべて入力してください");
+    if (!email || !password || !room) {
+        alert("メールアドレス・パスワード・ルーム名をすべて入力してください");
         return;
     }
 
@@ -106,8 +123,18 @@ document.getElementById("loginButton").addEventListener("click", () => {
         .then(userCredential => {
             const uid = userCredential.user.uid;
             
-            // ログイン成功後、ゲームセッションに参加
-            enterPark(uid, name, room); 
+            // Firestoreからユーザー名を取得
+            db.collection("users").doc(uid).get().then(doc => {
+                // 新規登録画面のユーザー名入力欄があればそれを使う（もしユーザーがログイン前に登録名を入力していた場合）
+                const nameInput = document.getElementById("registerName");
+                const defaultName = nameInput && nameInput.value.trim() ? nameInput.value.trim() : 'Guest';
+                
+                // Firestoreから取得できればそれを使用、なければ defaultName
+                const displayName = doc.exists ? doc.data().displayName : defaultName; 
+                
+                // ログイン成功後、ゲームセッションに参加
+                enterPark(uid, displayName, room); 
+            });
         })
         .catch(error => {
             console.error("ログイン失敗:", error);
